@@ -16,3 +16,16 @@ def nan_equal(arr1, arr2):
 
 def _print(msg):
     print(msg, file=sys.stderr)
+
+
+class ReplacementManager(object):
+    # pylint: disable=too-few-public-methods
+    def __init__(self, num_rpl, str_rpl):
+        self.num_rpl = num_rpl
+        self.str_rpl = str_rpl
+
+    def get_rpl_for(self, series):
+        if series.dtype == 'object':
+            return self.str_rpl
+        else:
+            return self.num_rpl
