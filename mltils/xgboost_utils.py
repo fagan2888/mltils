@@ -5,15 +5,15 @@ from operator import itemgetter
 import pandas as pd
 
 
-def compute_xgbfi_interactions(bst, feature_names, fmap='xgb.fmap',
-                               fdump='xgb.dump', **kwargs):
+def xgbfi(bst, feature_names, fmap='xgb.fmap', fdump='xgb.dump', **kwargs):
     create_feature_map(feature_names, fmap)
     dump_model(bst, fdump, fmap)
     kwargs['dump_file'] = fdump
-    return xgbfi(**kwargs)
+    return call_xgbfi(**kwargs)
 
 
-def get_importance(bst, feature_names, fmap='xgb.fmap', as_pandas=True, fscore=True):
+def get_importance(bst, feature_names, fmap='xgb.fmap', as_pandas=True,
+                   fscore=True):
     create_feature_map(feature_names, fmap)
     if fscore:
         imp = bst.get_fscore(fmap=fmap)
@@ -28,10 +28,10 @@ def get_importance(bst, feature_names, fmap='xgb.fmap', as_pandas=True, fscore=T
     return imp
 
 
-def xgbfi(dump_file='xgb.dump', max_depth=4, max_deepening=-1,
-          max_trees=1000, topk=100, sort_by='Gain',
-          out_file='XgbFeatureInteractions', max_histograms=10,
-          path='git/xgbfi/bin/XgbFeatureInteractions.exe'):
+def call_xgbfi(dump_file='xgb.dump', max_depth=4, max_deepening=-1,
+               max_trees=1000, topk=100, sort_by='Gain',
+               out_file='XgbFeatureInteractions', max_histograms=10,
+               path='git/xgbfi/bin/XgbFeatureInteractions.exe'):
     # pylint: disable=too-many-arguments, too-many-locals
     home = os.environ['HOME']
     xgbfi_path = os.path.join(home, path)
