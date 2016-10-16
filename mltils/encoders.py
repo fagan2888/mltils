@@ -11,15 +11,19 @@ from .utils import validate_is_data_frame, _print, ReplacementManager
 
 
 class CountEncoder(object):
-    def __init__(self, str_nan_rpl='NaN', num_nan_rpl=-99999, verbose=False):
+    def __init__(self, variables=None, str_nan_rpl='NaN', num_nan_rpl=-99999,
+                 verbose=False):
+        self.variables = variables
         self.str_nan_rpl = str_nan_rpl
         self.num_nan_rpl = num_nan_rpl
         self.verbose = verbose
         self.nan_rpl_mgr = ReplacementManager(num_nan_rpl, str_nan_rpl)
-        self._maps = {}
+        self.count_maps = {}
 
     def fit(self, data):
         validate_is_data_frame(data)
+        self.variables = self.variables if self.variables is not None else data.columns
+        data = data[self.variables]
         if self.verbose > 0:
             _print('Computing counts...')
             itr = tqdm(data.columns)
@@ -27,12 +31,13 @@ class CountEncoder(object):
             itr = data.columns
         for var in itr:
             rpl = self.nan_rpl_mgr.get_rpl_for(data[var])
-            var_map = data[var].fillna(rpl).value_counts().to_dict()
-            self._maps[var] = var_map
+            var_count = data[var].fillna(rpl).value_counts().to_dict()
+            self.count_maps[var] = var_count
         return self
 
     def transform(self, data):
         validate_is_data_frame(data)
+        data = data[self.variables]
         count_vars = []
         nb_samples = data.shape[0]
         if self.verbose == 1:
@@ -51,8 +56,8 @@ class CountEncoder(object):
             else:
                 itr = values.iteritems()
             for index, current_value in itr:
-                if current_value in self._maps[var]:
-                    count_var.at[index] = self._maps[var][current_value]
+                if current_value in self.count_maps[var]:
+                    count_var.at[index] = self.count_maps[var][current_value]
             count_var = count_var.rename(count_var_name)
             count_vars.append(count_var)
         if len(count_vars) > 0:
