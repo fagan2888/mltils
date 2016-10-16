@@ -174,10 +174,9 @@ class SparseValuesEncoder(object):
     def fit(self, _):
         return self
 
-    def transform(self, data, variables=None, copy=True):
+    def transform(self, data, variables=None):
         variables = data.columns if variables is None else variables
-        if copy:
-            data = data.copy()
+        data = data.copy()
         if self.sps_trhsld > 0:
             if self.verbose:
                 _print('Removing sparse values...')
