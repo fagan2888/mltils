@@ -2,11 +2,72 @@
 from __future__ import print_function
 
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from scipy import sparse
 
 from .utils import validate_is_data_frame, _print
+
+
+class CountEncoder(object):
+    def __init__(self, rpl_nan_str='NaN', rpl_nan_num=-99999, verbose=False):
+        self.rpl_nan_str = rpl_nan_str
+        self.rpl_nan_num = rpl_nan_num
+        self.verbose = verbose
+        self._maps = {}
+
+    def fit(self, data):
+        validate_is_data_frame(data)
+        if self.verbose > 0:
+            _print('Computing counts...')
+            itr = tqdm(data.columns)
+        else:
+            itr = data.columns
+        for var in itr:
+            rpl = self._nan_rpl_for(data[var])
+            var_map = data[var].fillna(rpl).value_counts().to_dict()
+            self._maps[var] = var_map
+        return self
+
+    def transform(self, data):
+        validate_is_data_frame(data)
+        count_vars = []
+        nb_samples = data.shape[0]
+        if self.verbose == 1:
+            _print('Extracting counts...')
+            cols_itr = tqdm(data.columns)
+        else:
+            cols_itr = data.columns
+        for var in cols_itr:
+            count_var_name = var + '_count'
+            count_var = pd.Series(np.zeros(nb_samples), index=data.index)
+            rpl = self._nan_rpl_for(data[var])
+            values = data[var].fillna(rpl)
+            if self.verbose == 2:
+                _print('Extracting counts for %s' % var)
+                itr = tqdm(values.iteritems(), total=nb_samples)
+            else:
+                itr = values.iteritems()
+            for index, current_value in itr:
+                if current_value in self._maps[var]:
+                    count_var.at[index] = self._maps[var][current_value]
+            count_var = count_var.rename(count_var_name)
+            count_vars.append(count_var)
+        if len(count_vars) > 0:
+            return pd.concat(count_vars, axis=1)
+        else:
+            return pd.DataFrame()
+
+    def fit_transform(self, data):
+        self.fit(data)
+        return self.transform(data)
+
+    def _nan_rpl_for(self, values):
+        if values.dtype == 'object':
+            return self.rpl_nan_str
+        else:
+            return self.rpl_nan_num
 
 
 class DummyEncoder(object):
