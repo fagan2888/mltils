@@ -106,3 +106,33 @@ def test_dummy_encoder_5():
          [0, 0, 1],
          [1, 2, np.nan]]).T
     assert nan_equal(expected, encoded)
+
+
+def test_dummy_encoder_6():
+    df = pd.DataFrame(
+        {'A': ['a', 'b', 'd'],
+         'B': ['d', 'd', 'f'],
+         'C': [1, 2, np.nan]})
+    denc = DummyEncoder(sps_trhsld=1, str_rpl='unk').fit(df)
+    assert denc.var_names == ['A_unk', 'B_d', 'B_unk', 'C']
+
+
+def test_dummy_encoder_7():
+    tr_df = pd.DataFrame({'A': ['a', 'b', 'd']})
+    denc = DummyEncoder(sps_trhsld=0).fit(tr_df)
+    te_df = pd.DataFrame({'A': ['f', 'h', 'y']})
+    encoded = denc.transform(te_df).todense()
+    expected = np.array(
+        [[0, 0, 0],
+         [0, 0, 0],
+         [0, 0, 0]]).T
+    assert np.array_equal(expected, encoded)
+
+
+def test_dummy_encoder_8():
+    tr_df = pd.DataFrame({'A': ['a', 'b', 'd']})
+    denc = DummyEncoder(sps_trhsld=1).fit(tr_df)
+    te_df = pd.DataFrame({'A': ['f', 'h', 'y']})
+    encoded = denc.transform(te_df).todense()
+    expected = np.array([[1, 1, 1]]).T
+    assert np.array_equal(expected, encoded)
