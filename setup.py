@@ -4,7 +4,7 @@ from setuptools import find_packages
 
 setup(name='mltils',
       version='0.1',
-      description='A package with utilities functions for Machine Learning',
+      description='A package with utility functions for Machine Learning',
       author='Rafael Ladeira',
       author_email='rwladeira@gmail.com',
       license='MIT',
