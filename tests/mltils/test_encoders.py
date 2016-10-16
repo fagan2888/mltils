@@ -34,7 +34,7 @@ def test_dummy_encoder_4():
         {'A': ['a', 'b', np.nan],
          'B': ['d', 'd', 'f'],
          'C': [1, 2, np.nan]})
-    denc = DummyEncoder(rpl_nan_cat='ab').fit(df)
+    denc = DummyEncoder(nan_cat_rpl='ab').fit(df)
     assert denc.var_names == ['A_a', 'A_ab', 'A_b', 'B_d', 'B_f', 'C']
 
 

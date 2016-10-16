@@ -7,14 +7,15 @@ from tqdm import tqdm
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from scipy import sparse
 
-from .utils import validate_is_data_frame, _print
+from .utils import validate_is_data_frame, _print, ReplacementManager
 
 
 class CountEncoder(object):
-    def __init__(self, rpl_nan_str='NaN', rpl_nan_num=-99999, verbose=False):
-        self.rpl_nan_str = rpl_nan_str
-        self.rpl_nan_num = rpl_nan_num
+    def __init__(self, str_nan_rpl='NaN', num_nan_rpl=-99999, verbose=False):
+        self.str_nan_rpl = str_nan_rpl
+        self.num_nan_rpl = num_nan_rpl
         self.verbose = verbose
+        self.nan_rpl_mgr = ReplacementManager(num_nan_rpl, str_nan_rpl)
         self._maps = {}
 
     def fit(self, data):
@@ -25,7 +26,7 @@ class CountEncoder(object):
         else:
             itr = data.columns
         for var in itr:
-            rpl = self._nan_rpl_for(data[var])
+            rpl = self.nan_rpl_mgr.get_rpl_for(data[var])
             var_map = data[var].fillna(rpl).value_counts().to_dict()
             self._maps[var] = var_map
         return self
@@ -42,7 +43,7 @@ class CountEncoder(object):
         for var in cols_itr:
             count_var_name = var + '_count'
             count_var = pd.Series(np.zeros(nb_samples), index=data.index)
-            rpl = self._nan_rpl_for(data[var])
+            rpl = self.nan_rpl_mgr.get_rpl_for(data[var])
             values = data[var].fillna(rpl)
             if self.verbose == 2:
                 _print('Extracting counts for %s' % var)
@@ -63,30 +64,27 @@ class CountEncoder(object):
         self.fit(data)
         return self.transform(data)
 
-    def _nan_rpl_for(self, values):
-        if values.dtype == 'object':
-            return self.rpl_nan_str
-        else:
-            return self.rpl_nan_num
-
 
 class DummyEncoder(object):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
-    def __init__(self, sps_trhsld=0, sep='_', verbose=False, rpl_num=-999,
-                 rpl_str='__unknown__', rpl_nan_cat='NaN'):
-        self.sps_trhsld = sps_trhsld
-        self.rpl_num = rpl_num
-        self.rpl_str = rpl_str
-        self.rpl_nan_cat = rpl_nan_cat
+    def __init__(self, sps_trhsld=0, sep='_', verbose=False, num_rpl=-99999,
+                 str_rpl='__unknown__', nan_cat_rpl='NaN'):
         self.sep = sep
         self.verbose = verbose
+        self.nan_cat_rpl = nan_cat_rpl
         self.variables = None
         self.cat_vars = None
         self.num_vars = None
         self.var_values = {}
         self.lencs = {}
-        self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.var_names = []
+        self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
+        self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
+        self.sps_enc = SparseValuesEncoder(
+            sps_trhsld=sps_trhsld,
+            str_rpl=str_rpl,
+            num_rpl=num_rpl,
+            verbose=verbose)
 
     def fit(self, data):
         validate_is_data_frame(data)
@@ -94,20 +92,7 @@ class DummyEncoder(object):
         self.cat_vars = data.select_dtypes(include=['category', 'object']).columns
         self.num_vars = np.setdiff1d(self.variables, self.cat_vars)
 
-        data = data.copy()
-        if self.sps_trhsld > 0:
-            if self.verbose:
-                _print('Removing sparse values...')
-                var_itr = tqdm(self.cat_vars)
-            else:
-                var_itr = self.cat_vars
-            for var in var_itr:
-                var_count = data[var].value_counts()
-                sps_values = var_count.index[var_count <= self.sps_trhsld]
-                sps_rows = data[var].isin(sps_values)
-                if sps_rows.any():
-                    rpl_val = self._rpl_val_for(data[var])
-                    data.loc[sps_rows, var] = rpl_val
+        data = self.sps_enc.transform(data, variables=self.cat_vars)
 
         if self.verbose:
             _print('Encoding as integers...')
@@ -118,7 +103,7 @@ class DummyEncoder(object):
             data = self.fill_na(data, var)
             unique_vals = set(data[var].unique())
             self.var_values[var] = unique_vals
-            rpl_val = self._rpl_val_for(data[var])
+            rpl_val = self.rpl_mgr.get_rpl_for(data[var])
             values = np.concatenate([data[var].values, [rpl_val]])
             lenc = LabelEncoder().fit(values)
             self.lencs[var] = lenc
@@ -152,7 +137,7 @@ class DummyEncoder(object):
             unique_vals = self.var_values[var]
             unknown_mask = ~(data[var].isin(unique_vals).values)
             if unknown_mask.any():
-                rpl_val = self._rpl_val_for(data[var])
+                rpl_val = self.rpl_mgr.get_rpl_for(data[var])
                 data.loc[unknown_mask, var] = rpl_val
 
         if self.verbose:
@@ -175,11 +160,35 @@ class DummyEncoder(object):
     def fill_na(self, data, var):
         null_mask = data[var].isnull()
         if null_mask.any():
-            data.loc[null_mask, var] = self.rpl_nan_cat
+            data.loc[null_mask, var] = self.nan_cat_rpl
         return data
 
-    def _rpl_val_for(self, values):
-        if values.dtype == 'object':
-            return self.rpl_str
-        else:
-            return self.rpl_num
+
+class SparseValuesEncoder(object):
+    def __init__(self, sps_trhsld=50, str_rpl='__sparse__', num_rpl=-99999,
+                 verbose=False):
+        self.sps_trhsld = sps_trhsld
+        self.verbose = verbose
+        self.nan_rpl_mgr = ReplacementManager(num_rpl, str_rpl)
+
+    def fit(self, _):
+        return self
+
+    def transform(self, data, variables=None, copy=True):
+        variables = data.columns if variables is None else variables
+        if copy:
+            data = data.copy()
+        if self.sps_trhsld > 0:
+            if self.verbose:
+                _print('Removing sparse values...')
+                var_itr = tqdm(variables)
+            else:
+                var_itr = variables
+            for var in var_itr:
+                var_count = data[var].value_counts()
+                sps_values = var_count.index[var_count <= self.sps_trhsld]
+                sps_rows = data[var].isin(sps_values)
+                if sps_rows.any():
+                    rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
+                    data.loc[sps_rows, var] = rpl_val
+        return data
