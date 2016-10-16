@@ -13,12 +13,13 @@ def xgbfi(bst, feature_names, fmap='xgb.fmap', fdump='xgb.dump', **kwargs):
 
 
 def get_importance(bst, feature_names, fmap='xgb.fmap', as_pandas=True,
-                   fscore=True):
+                   fscore=True, importance_type='gain'):
+    # pylint: disable=too-many-arguments
     create_feature_map(feature_names, fmap)
     if fscore:
-        imp = bst.get_fscore(fmap=fmap)
+        imp = bst.get_fscore(fmap)
     else:
-        imp = bst.get_score(fmap=fmap)
+        imp = bst.get_score(fmap, importance_type)
     imp = sorted(imp.items(), key=itemgetter(1), reverse=True)
     if as_pandas:
         imp = pd.DataFrame(
@@ -32,7 +33,7 @@ def call_xgbfi(dump_file='xgb.dump', max_depth=4, max_deepening=-1,
                max_trees=1000, topk=100, sort_by='Gain',
                out_file='XgbFeatureInteractions', max_histograms=10,
                path='git/xgbfi/bin/XgbFeatureInteractions.exe'):
-    # pylint: disable=too-many-arguments, too-many-locals
+    # pylint: disable=too-many-arguments, too-many-locals, invalid-name
     home = os.environ['HOME']
     xgbfi_path = os.path.join(home, path)
     if not os.path.exists(xgbfi_path):
@@ -52,12 +53,19 @@ def call_xgbfi(dump_file='xgb.dump', max_depth=4, max_deepening=-1,
         dump_file_arg, max_depth_arg, max_deepening_arg, max_trees_arg,
         topk_args, sort_by_arg, out_file_arg, max_histograms_arg])
 
+    to_normalize = [
+        'Gain', 'FScore', 'wFScore', 'Average wFScore', 'Average Gain',
+        'Expected Gain']
+
     spreadsheet = '%s.xlsx' % out_file
     result = {}
     for i in range(max_depth):
         sheetname = 'Interaction Depth %d' % i
         name = '_'.join(sheetname.lower().split(' ')[1:])
-        result[name] = pd.read_excel(spreadsheet, sheetname=sheetname)
+        df = pd.read_excel(spreadsheet, sheetname=sheetname)
+        for var in to_normalize:
+            df['%s_norm' % var] = df[var] / df[var].sum()
+        result[name] = df
     result['leaf'] = pd.read_excel(spreadsheet, sheetname='Leaf Statistics')
     return result
 
