@@ -32,10 +32,10 @@ def get_importance(bst, feature_names, fmap='xgb.fmap', as_pandas=True,
 def call_xgbfi(dump_file='xgb.dump', max_depth=4, max_deepening=-1,
                max_trees=1000, topk=100, sort_by='Gain',
                out_file='XgbFeatureInteractions', max_histograms=10,
-               path='git/xgbfi/bin/XgbFeatureInteractions.exe'):
+               path='git/xgbfi/bin'):
     # pylint: disable=too-many-arguments, too-many-locals, invalid-name
     home = os.environ['HOME']
-    xgbfi_path = os.path.join(home, path)
+    xgbfi_path = os.path.join(home, path, 'XgbFeatureInteractions.exe')
     if not os.path.exists(xgbfi_path):
         raise ValueError('%s does not exist' % xgbfi_path)
 
