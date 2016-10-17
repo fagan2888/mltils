@@ -4,8 +4,9 @@ from __future__ import print_function
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from scipy import sparse
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from statsmodels.distributions import ECDF
 
 from .utils import validate_is_data_frame, _print, ReplacementManager
 
@@ -47,7 +48,8 @@ class CountEncoder(object):
             cols_itr = data.columns
         for var in cols_itr:
             count_var_name = var + '_count'
-            count_var = pd.Series(np.zeros(nb_samples), index=data.index)
+            count_var = pd.Series(np.zeros(nb_samples), index=data.index,
+                                  name=count_var_name)
             rpl = self.nan_rpl_mgr.get_rpl_for(data[var])
             values = data[var].fillna(rpl)
             if self.verbose == 2:
@@ -58,7 +60,6 @@ class CountEncoder(object):
             for index, current_value in itr:
                 if current_value in self.count_maps[var]:
                     count_var.at[index] = self.count_maps[var][current_value]
-            count_var = count_var.rename(count_var_name)
             count_vars.append(count_var)
         if len(count_vars) > 0:
             return pd.concat(count_vars, axis=1)
@@ -85,7 +86,7 @@ class DummyEncoder(object):
         self.var_names = []
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
-        self.sps_enc = SparseValuesEncoder(
+        self.sps_enc = InfrequentValueEncoder(
             sps_trhsld=sps_trhsld,
             str_rpl=str_rpl,
             num_rpl=num_rpl,
@@ -169,7 +170,7 @@ class DummyEncoder(object):
         return data
 
 
-class SparseValuesEncoder(object):
+class InfrequentValueEncoder(object):
     def __init__(self, sps_trhsld=50, str_rpl='__sparse__', num_rpl=-99999,
                  verbose=False):
         self.sps_trhsld = sps_trhsld
@@ -196,3 +197,41 @@ class SparseValuesEncoder(object):
                     rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
                     data.loc[sps_rows, var] = rpl_val
         return data
+
+
+class PercentileEncoder(object):
+    def __init__(self, verbose=False):
+        self.verbose = verbose
+        self.variables = None
+        self.ecdfs = {}
+
+    def fit(self, data):
+        self.variables = data.select_dtypes(include=['float', 'int']).columns
+        if self.verbose:
+            _print('Fitting ECDFs...')
+            itr = tqdm(self.variables)
+        else:
+            itr = self.variables
+        for var in itr:
+            self.ecdfs[var] = ECDF(data[var].values)
+        return self
+
+    def transform(self, data):
+        if self.verbose:
+            _print('Extracting percentiles...')
+            itr = tqdm(self.variables)
+        else:
+            itr = self.variables
+        percentiles = []
+        for var in itr:
+            ecdf = self.ecdfs[var]
+            prcntl_var_name = '%s_prctl' % var
+            prcntl_var = pd.Series(ecdf(data[var].values), index=data.index,
+                                   name=prcntl_var_name)
+            percentiles.append(prcntl_var)
+        extracted = pd.concat(percentiles, axis=1)
+        return extracted
+
+    def fit_transform(self, data):
+        self.fit(data)
+        return self.transform(data)
