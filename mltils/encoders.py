@@ -61,10 +61,7 @@ class CountEncoder(object):
                 if current_value in self.count_maps[var]:
                     count_var.at[index] = self.count_maps[var][current_value]
             count_vars.append(count_var)
-        if len(count_vars) > 0:
-            return pd.concat(count_vars, axis=1)
-        else:
-            return pd.DataFrame()
+        return pd.concat(count_vars, axis=1)
 
     def fit_transform(self, data):
         self.fit(data)
@@ -73,7 +70,7 @@ class CountEncoder(object):
 
 class DummyEncoder(object):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
-    def __init__(self, sps_trhsld=0, sep='_', verbose=False, num_rpl=-99999,
+    def __init__(self, ive_threshold=0, sep='_', verbose=False, num_rpl=-99999,
                  str_rpl='__unknown__', nan_cat_rpl='NaN'):
         self.sep = sep
         self.verbose = verbose
@@ -86,8 +83,8 @@ class DummyEncoder(object):
         self.var_names = []
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
-        self.sps_enc = InfrequentValueEncoder(
-            sps_trhsld=sps_trhsld,
+        self.ive = InfrequentValueEncoder(
+            threshold=ive_threshold,
             str_rpl=str_rpl,
             num_rpl=num_rpl,
             verbose=verbose)
@@ -98,7 +95,7 @@ class DummyEncoder(object):
         self.cat_vars = data.select_dtypes(include=['category', 'object']).columns
         self.num_vars = np.setdiff1d(self.variables, self.cat_vars)
 
-        data = self.sps_enc.transform(data, variables=self.cat_vars)
+        data = self.ive.transform(data, variables=self.cat_vars)
 
         if self.verbose:
             _print('Encoding as integers...')
@@ -171,9 +168,9 @@ class DummyEncoder(object):
 
 
 class InfrequentValueEncoder(object):
-    def __init__(self, sps_trhsld=50, str_rpl='__sparse__', num_rpl=-99999,
+    def __init__(self, threshold=50, str_rpl='__sparse__', num_rpl=-99999,
                  verbose=False):
-        self.sps_trhsld = sps_trhsld
+        self.threshold = threshold
         self.verbose = verbose
         self.nan_rpl_mgr = ReplacementManager(num_rpl, str_rpl)
 
@@ -182,8 +179,8 @@ class InfrequentValueEncoder(object):
 
     def transform(self, data, variables=None):
         variables = data.columns if variables is None else variables
-        data = data.copy()
-        if self.sps_trhsld > 0:
+        if self.threshold > 0:
+            data = data.copy()
             if self.verbose:
                 _print('Removing sparse values...')
                 var_itr = tqdm(variables)
@@ -191,7 +188,7 @@ class InfrequentValueEncoder(object):
                 var_itr = variables
             for var in var_itr:
                 var_count = data[var].value_counts()
-                sps_values = var_count.index[var_count <= self.sps_trhsld]
+                sps_values = var_count.index[var_count <= self.threshold]
                 sps_rows = data[var].isin(sps_values)
                 if sps_rows.any():
                     rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
