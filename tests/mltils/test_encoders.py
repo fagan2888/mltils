@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from mltils.encoders import CountEncoder, DummyEncoder
+from mltils.encoders import CountEncoder, DummyEncoder, PercentileEncoder
 from mltils.utils import nan_equal
 
 
@@ -136,3 +136,24 @@ def test_dummy_encoder_8():
     encoded = denc.transform(te_df).todense()
     expected = np.array([[1, 1, 1]]).T
     assert np.array_equal(expected, encoded)
+
+
+def test_percentile_encoder_1():
+    penc = PercentileEncoder()
+    assert penc is not None
+
+
+def test_percentile_encoder_2():
+    df = pd.DataFrame({'A': [1., 2., 2., 3., 3.],
+                       'B': [1, 2, 3, 4, 5]})
+    encoded = PercentileEncoder().fit_transform(df)
+    assert encoded.columns.tolist() == ['A_prctl', 'B_prctl']
+
+
+def test_percentile_encoder_3():
+    df = pd.DataFrame({'A': [1., 2.],
+                       'B': [1, 2],
+                       'C': ['A', 'B'],
+                       'D': ['C', 'D']})
+    encoded = PercentileEncoder().fit_transform(df)
+    assert encoded.columns.tolist() == ['A_prctl', 'B_prctl']
