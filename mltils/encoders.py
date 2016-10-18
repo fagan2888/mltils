@@ -72,6 +72,7 @@ class DummyEncoder(object):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
     def __init__(self, infq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
                  str_rpl='__unknown__', nan_cat_rpl='NaN', copy=True):
+        self.infq_thrshld = infq_thrshld
         self.sep = sep
         self.verbose = verbose
         self.nan_cat_rpl = nan_cat_rpl
@@ -96,9 +97,8 @@ class DummyEncoder(object):
 
         if self.copy:
             data = data.copy()
-        # data.loc[:, self.cat_vars] = \
-        #     self.ive.fit_transform(data, variables=self.cat_vars)
-
+        if self.infq_thrshld > 0:
+            data.loc[:, self.cat_vars] = self.ive.fit_transform(data, self.cat_vars)
         if self.verbose:
             _print('Encoding as integers...')
             var_itr = tqdm(self.cat_vars)
@@ -131,9 +131,10 @@ class DummyEncoder(object):
         if not data.columns.equals(self.variables):
             raise ValueError('Unexpected variables found!')
 
-        data = data.copy()
-        # data.loc[:, self.cat_vars] = self.ive.transform(data)
-
+        if self.copy:
+            data = data.copy()
+        if self.infq_thrshld > 0:
+            data.loc[:, self.cat_vars] = self.ive.transform(data)
         if self.verbose:
             _print('Encoding unknown values...')
             var_itr = tqdm(self.cat_vars)
@@ -213,7 +214,7 @@ class InfrequentValueEncoder(object):
 
     def fit_transform(self, data, variables=None):
         self.fit(data, variables)
-        return self.fit_transform(data)
+        return self.transform(data)
 
 
 class PercentileEncoder(object):
