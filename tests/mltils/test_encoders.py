@@ -59,7 +59,6 @@ def test_count_encoder_5():
     assert expected.equals(encoded)
 
 
-
 def test_dummy_encoder_1():
     denc = DummyEncoder()
     assert denc is not None
@@ -136,6 +135,16 @@ def test_dummy_encoder_8():
     encoded = denc.transform(te_df).todense()
     expected = np.array([[1, 1, 1]]).T
     assert np.array_equal(expected, encoded)
+
+
+def test_dummy_encoder_9():
+    df = pd.DataFrame(
+        {'A': ['a', np.nan, np.nan],
+         'B': ['c', 'c', 'd'],
+         'C': [1, 2, np.nan]})
+    df_before = df.copy()
+    _ = DummyEncoder().fit(df)
+    assert df_before.equals(df)
 
 
 def test_percentile_encoder_1():
