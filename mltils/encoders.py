@@ -71,10 +71,11 @@ class CountEncoder(object):
 class DummyEncoder(object):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
     def __init__(self, infq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
-                 str_rpl='__unknown__', nan_cat_rpl='NaN'):
+                 str_rpl='__unknown__', nan_cat_rpl='NaN', copy=True):
         self.sep = sep
         self.verbose = verbose
         self.nan_cat_rpl = nan_cat_rpl
+        self.copy = copy
         self.variables = None
         self.cat_vars = None
         self.num_vars = None
@@ -84,10 +85,8 @@ class DummyEncoder(object):
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
         self.ive = InfrequentValueEncoder(
-            thrshld=infq_thrshld,
-            str_rpl=str_rpl,
-            num_rpl=num_rpl,
-            verbose=verbose)
+            thrshld=infq_thrshld, str_rpl=str_rpl,
+            num_rpl=num_rpl, verbose=verbose, copy=False)
 
     def fit(self, data):
         validate_is_data_frame(data)
@@ -95,6 +94,8 @@ class DummyEncoder(object):
         self.cat_vars = data.select_dtypes(include=['category', 'object']).columns
         self.num_vars = np.setdiff1d(self.variables, self.cat_vars)
 
+        if self.copy:
+            data = data.copy()
         data = self.ive.transform(data, variables=self.cat_vars)
 
         if self.verbose:
@@ -168,10 +169,12 @@ class DummyEncoder(object):
 
 
 class InfrequentValueEncoder(object):
+    # pylint: disable=too-many-arguments
     def __init__(self, thrshld=50, str_rpl='__sparse__', num_rpl=-99999,
-                 verbose=False):
+                 verbose=False, copy=True):
         self.thrshld = thrshld
         self.verbose = verbose
+        self.copy = copy
         self.nan_rpl_mgr = ReplacementManager(num_rpl, str_rpl)
 
     def fit(self, _):
@@ -179,8 +182,9 @@ class InfrequentValueEncoder(object):
 
     def transform(self, data, variables=None):
         variables = data.columns if variables is None else variables
-        data = data.copy()
         if self.thrshld > 0:
+            if self.copy:
+                data = data.copy()
             if self.verbose:
                 _print('Removing sparse values...')
                 var_itr = tqdm(variables)
@@ -232,3 +236,6 @@ class PercentileEncoder(object):
     def fit_transform(self, data):
         self.fit(data)
         return self.transform(data)
+
+
+# TODO: implementar funcao que seleciona colunas com determinado dtype
