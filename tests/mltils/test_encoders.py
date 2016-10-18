@@ -113,13 +113,13 @@ def test_dummy_encoder_6():
         {'A': ['a', 'b', 'd'],
          'B': ['d', 'd', 'f'],
          'C': [1, 2, np.nan]})
-    denc = DummyEncoder(threshold=1, str_rpl='unk').fit(df)
+    denc = DummyEncoder(infq_thrshld=1, str_rpl='unk').fit(df)
     assert denc.var_names == ['A_unk', 'B_d', 'B_unk', 'C']
 
 
 def test_dummy_encoder_7():
     tr_df = pd.DataFrame({'A': ['a', 'b', 'd']})
-    denc = DummyEncoder(threshold=0).fit(tr_df)
+    denc = DummyEncoder(infq_thrshld=0).fit(tr_df)
     te_df = pd.DataFrame({'A': ['f', 'h', 'y']})
     encoded = denc.transform(te_df).todense()
     expected = np.array(
@@ -131,7 +131,7 @@ def test_dummy_encoder_7():
 
 def test_dummy_encoder_8():
     tr_df = pd.DataFrame({'A': ['a', 'b', 'd']})
-    denc = DummyEncoder(threshold=1).fit(tr_df)
+    denc = DummyEncoder(infq_thrshld=1).fit(tr_df)
     te_df = pd.DataFrame({'A': ['f', 'h', 'y']})
     encoded = denc.transform(te_df).todense()
     expected = np.array([[1, 1, 1]]).T

@@ -70,7 +70,7 @@ class CountEncoder(object):
 
 class DummyEncoder(object):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
-    def __init__(self, ive_threshold=0, sep='_', verbose=False, num_rpl=-99999,
+    def __init__(self, infq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
                  str_rpl='__unknown__', nan_cat_rpl='NaN'):
         self.sep = sep
         self.verbose = verbose
@@ -84,7 +84,7 @@ class DummyEncoder(object):
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
         self.ive = InfrequentValueEncoder(
-            threshold=ive_threshold,
+            thrshld=infq_thrshld,
             str_rpl=str_rpl,
             num_rpl=num_rpl,
             verbose=verbose)
@@ -168,9 +168,9 @@ class DummyEncoder(object):
 
 
 class InfrequentValueEncoder(object):
-    def __init__(self, threshold=50, str_rpl='__sparse__', num_rpl=-99999,
+    def __init__(self, thrshld=50, str_rpl='__sparse__', num_rpl=-99999,
                  verbose=False):
-        self.threshold = threshold
+        self.thrshld = thrshld
         self.verbose = verbose
         self.nan_rpl_mgr = ReplacementManager(num_rpl, str_rpl)
 
@@ -179,8 +179,8 @@ class InfrequentValueEncoder(object):
 
     def transform(self, data, variables=None):
         variables = data.columns if variables is None else variables
-        if self.threshold > 0:
-            data = data.copy()
+        data = data.copy()
+        if self.thrshld > 0:
             if self.verbose:
                 _print('Removing sparse values...')
                 var_itr = tqdm(variables)
@@ -188,7 +188,7 @@ class InfrequentValueEncoder(object):
                 var_itr = variables
             for var in var_itr:
                 var_count = data[var].value_counts()
-                sps_values = var_count.index[var_count <= self.threshold]
+                sps_values = var_count.index[var_count <= self.thrshld]
                 sps_rows = data[var].isin(sps_values)
                 if sps_rows.any():
                     rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
