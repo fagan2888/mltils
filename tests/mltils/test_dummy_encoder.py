@@ -2,61 +2,8 @@
 import numpy as np
 import pandas as pd
 
-from mltils.encoders import CountEncoder, DummyEncoder, PercentileEncoder
+from mltils.encoders import DummyEncoder
 from mltils.utils import nan_equal
-
-
-def test_count_encoder_1():
-    cenc = CountEncoder()
-    assert cenc is not None
-
-
-def test_count_encoder_2():
-    df = pd.DataFrame(
-        {'A': ['a', 'a', 'a'],
-         'B': ['c', 'c', 'd'],
-         'C': [1, 2, 3]})
-    encoded = CountEncoder().fit_transform(df)
-    expected = pd.DataFrame(
-        {'A_count': [3., 3., 3.],
-         'B_count': [2., 2., 1.],
-         'C_count': [1., 1., 1.]})
-    assert expected.equals(encoded)
-
-
-def test_count_encoder_3():
-    df = pd.DataFrame(
-        {'A': ['a', np.nan, np.nan],
-         'B': ['c', 'c', 'd'],
-         'C': [1, 2, np.nan]})
-    encoded = CountEncoder().fit_transform(df)
-    expected = pd.DataFrame(
-        {'A_count': [1., 2., 2.],
-         'B_count': [2., 2., 1.],
-         'C_count': [1., 1., 1.]})
-    assert expected.equals(encoded)
-
-
-def test_count_encoder_4():
-    df = pd.DataFrame(
-        {'A': ['a', np.nan, np.nan],
-         'B': ['c', 'c', 'd'],
-         'C': [1, 2, np.nan]})
-    df_before = df.copy()
-    _ = CountEncoder().fit_transform(df)
-    assert df_before.equals(df)
-
-
-def test_count_encoder_5():
-    df = pd.DataFrame(
-        {'A': ['a', np.nan, np.nan],
-         'B': ['c', 'c', 'd'],
-         'C': [1, 2, np.nan]})
-    encoded = CountEncoder(variables=['A', 'B']).fit_transform(df)
-    expected = pd.DataFrame(
-        {'A_count': [1., 2., 2.],
-         'B_count': [2., 2., 1.]})
-    assert expected.equals(encoded)
 
 
 def test_dummy_encoder_1():
@@ -145,24 +92,3 @@ def test_dummy_encoder_9():
     df_before = df.copy()
     _ = DummyEncoder().fit(df)
     assert df_before.equals(df)
-
-
-def test_percentile_encoder_1():
-    penc = PercentileEncoder()
-    assert penc is not None
-
-
-def test_percentile_encoder_2():
-    df = pd.DataFrame({'A': [1., 2., 2., 3., 3.],
-                       'B': [1, 2, 3, 4, 5]})
-    encoded = PercentileEncoder().fit_transform(df)
-    assert encoded.columns.tolist() == ['A_prctl', 'B_prctl']
-
-
-def test_percentile_encoder_3():
-    df = pd.DataFrame({'A': [1., 2.],
-                       'B': [1, 2],
-                       'C': ['A', 'B'],
-                       'D': ['C', 'D']})
-    encoded = PercentileEncoder().fit_transform(df)
-    assert encoded.columns.tolist() == ['A_prctl', 'B_prctl']
