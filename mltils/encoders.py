@@ -110,6 +110,7 @@ class DummyEncoder(object):
             self.var_values[var] = unique_vals
             rpl_val = self.rpl_mgr.get_rpl_for(data[var])
             values = np.concatenate([data[var].values, [rpl_val]])
+            # TODO: Refatorar esses LabelEncoders para CategoryEncoder
             lenc = LabelEncoder().fit(values)
             self.lencs[var] = lenc
             data.loc[:, var] = lenc.transform(data[var])
