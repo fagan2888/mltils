@@ -86,7 +86,7 @@ class DummyEncoder(object):
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
         self.ive = InfrequentValueEncoder(
             thrshld=infq_thrshld, str_rpl=str_rpl,
-            num_rpl=num_rpl, verbose=verbose, copy=False)
+            num_rpl=num_rpl, verbose=verbose)
 
     def fit(self, data):
         validate_is_data_frame(data)
@@ -96,7 +96,8 @@ class DummyEncoder(object):
 
         if self.copy:
             data = data.copy()
-        data = self.ive.transform(data, variables=self.cat_vars)
+        # data.loc[:, self.cat_vars] = \
+        #     self.ive.fit_transform(data, variables=self.cat_vars)
 
         if self.verbose:
             _print('Encoding as integers...')
@@ -131,6 +132,8 @@ class DummyEncoder(object):
             raise ValueError('Unexpected variables found!')
 
         data = data.copy()
+        # data.loc[:, self.cat_vars] = self.ive.transform(data)
+
         if self.verbose:
             _print('Encoding unknown values...')
             var_itr = tqdm(self.cat_vars)
@@ -170,34 +173,47 @@ class DummyEncoder(object):
 
 class InfrequentValueEncoder(object):
     # pylint: disable=too-many-arguments
-    def __init__(self, thrshld=50, str_rpl='__sparse__', num_rpl=-99999,
-                 verbose=False, copy=True):
+    def __init__(self, thrshld=50, str_rpl='__infrequent__',
+                 num_rpl=-99999, verbose=False):
         self.thrshld = thrshld
         self.verbose = verbose
-        self.copy = copy
         self.nan_rpl_mgr = ReplacementManager(num_rpl, str_rpl)
+        self.variables = None
+        self.ifq_maps = {}
 
-    def fit(self, _):
-        return self
-
-    def transform(self, data, variables=None):
-        variables = data.columns if variables is None else variables
+    def fit(self, data, variables=None):
+        self.variables = data.columns if variables is None else variables
         if self.thrshld > 0:
-            if self.copy:
-                data = data.copy()
             if self.verbose:
-                _print('Removing sparse values...')
-                var_itr = tqdm(variables)
+                _print('Computing infrequent values...')
+                var_itr = tqdm(self.variables)
             else:
-                var_itr = variables
+                var_itr = self.variables
             for var in var_itr:
                 var_count = data[var].value_counts()
-                sps_values = var_count.index[var_count <= self.thrshld]
-                sps_rows = data[var].isin(sps_values)
-                if sps_rows.any():
+                ifq_values = var_count.index[var_count <= self.thrshld]
+                self.ifq_maps[var] = set(ifq_values)
+        return self
+
+    def transform(self, data):
+        if self.thrshld > 0:
+            data = data[self.variables].copy()
+            if self.verbose:
+                _print('Encoding infrequent values...')
+                var_itr = tqdm(self.variables)
+            else:
+                var_itr = self.variables
+            for var in var_itr:
+                ifq_values = self.ifq_maps[var]
+                ifq_rows = data[var].isin(ifq_values)
+                if ifq_rows.any():
                     rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
-                    data.loc[sps_rows, var] = rpl_val
+                    data.loc[ifq_rows, var] = rpl_val
         return data
+
+    def fit_transform(self, data, variables=None):
+        self.fit(data, variables)
+        return self.fit_transform(data)
 
 
 class PercentileEncoder(object):
@@ -236,6 +252,3 @@ class PercentileEncoder(object):
     def fit_transform(self, data):
         self.fit(data)
         return self.transform(data)
-
-
-# TODO: implementar funcao que seleciona colunas com determinado dtype
