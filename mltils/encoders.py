@@ -12,25 +12,24 @@ from .utils import validate_is_data_frame, _print, ReplacementManager
 
 
 class CountEncoder(object):
-    def __init__(self, variables=None, str_nan_rpl='NaN', num_nan_rpl=-99999,
-                 verbose=False):
-        self.variables = variables
+    def __init__(self, str_nan_rpl='NaN', num_nan_rpl=-99999, verbose=False):
         self.str_nan_rpl = str_nan_rpl
         self.num_nan_rpl = num_nan_rpl
         self.verbose = verbose
         self.nan_rpl_mgr = ReplacementManager(num_nan_rpl, str_nan_rpl)
         self.count_maps = {}
+        self.variables = None
 
-    def fit(self, data):
+    def fit(self, data, variables=None):
         validate_is_data_frame(data)
-        self.variables = self.variables if self.variables is not None else data.columns
+        self.variables = variables if variables is not None else data.columns
         data = data[self.variables]
         if self.verbose > 0:
             _print('Computing counts...')
-            itr = tqdm(data.columns)
+            var_itr = tqdm(data.columns)
         else:
-            itr = data.columns
-        for var in itr:
+            var_itr = data.columns
+        for var in var_itr:
             rpl = self.nan_rpl_mgr.get_rpl_for(data[var])
             var_count = data[var].fillna(rpl).value_counts().to_dict()
             self.count_maps[var] = var_count
@@ -63,8 +62,8 @@ class CountEncoder(object):
             count_vars.append(count_var)
         return pd.concat(count_vars, axis=1)
 
-    def fit_transform(self, data):
-        self.fit(data)
+    def fit_transform(self, data, variables=None):
+        self.fit(data, variables)
         return self.transform(data)
 
 
@@ -75,19 +74,19 @@ class DummyEncoder(object):
         self.infq_thrshld = infq_thrshld
         self.sep = sep
         self.verbose = verbose
-        self.nan_cat_rpl = nan_cat_rpl
         self.copy = copy
         self.variables = None
         self.cat_vars = None
         self.num_vars = None
-        self.var_values = {}
-        self.lencs = {}
         self.var_names = []
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
-        self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
-        self.ive = InfrequentValueEncoder(
-            thrshld=infq_thrshld, str_rpl=str_rpl,
-            num_rpl=num_rpl, verbose=verbose)
+        self.cat_enc = CategoryEncoder(
+            infq_thrshld=infq_thrshld,
+            num_rpl=num_rpl,
+            str_rpl=str_rpl,
+            nan_cat_rpl=nan_cat_rpl,
+            copy=copy
+        )
 
     def fit(self, data):
         validate_is_data_frame(data)
@@ -97,23 +96,11 @@ class DummyEncoder(object):
 
         if self.copy:
             data = data.copy()
-        if self.infq_thrshld > 0:
-            data.loc[:, self.cat_vars] = self.ive.fit_transform(data, self.cat_vars)
-        if self.verbose:
-            _print('Encoding as integers...')
-            var_itr = tqdm(self.cat_vars)
-        else:
-            var_itr = self.cat_vars
-        for var in var_itr:
-            data = self.fill_na(data, var)
-            unique_vals = set(data[var].unique())
-            self.var_values[var] = unique_vals
-            rpl_val = self.rpl_mgr.get_rpl_for(data[var])
-            values = np.concatenate([data[var].values, [rpl_val]])
-            # TODO: Refatorar esses LabelEncoders para CategoryEncoder
-            lenc = LabelEncoder().fit(values)
-            self.lencs[var] = lenc
-            data.loc[:, var] = lenc.transform(data[var])
+
+        data = self.cat_enc.fit_transform(data)
+
+        for var in self.cat_vars:
+            unique_vals = self.cat_enc.var_values[var]
             self.var_names.extend(
                 '%s%s%s' % (var, self.sep, str(value))
                 for value in sorted(unique_vals)
@@ -121,7 +108,7 @@ class DummyEncoder(object):
         self.var_names.extend(self.num_vars)
 
         if self.verbose:
-            _print('Fitting one hot enconder...')
+            _print('Fitting one hot encoder...')
         self.ohe.fit(data[self.cat_vars])
         if self.verbose:
             _print('Done!')
@@ -134,13 +121,65 @@ class DummyEncoder(object):
 
         if self.copy:
             data = data.copy()
+
+        data = self.cat_enc.transform(data)
+        ohe_enc = self.ohe.transform(data[self.cat_vars])
+        num_data = data[self.num_vars]
+        return sparse.hstack([ohe_enc, num_data], format='csr')
+
+    def fit_transform(self, data):
+        self.fit(data)
+        return self.transform(data)
+
+
+class CategoryEncoder(object):
+    # pylint: disable=too-many-arguments, too-many-instance-attributes
+    def __init__(self, infq_thrshld=0, num_rpl=-99999,
+                 str_rpl='__unknown__', nan_cat_rpl='NaN', verbose=False,
+                 copy=True):
+        self.infq_thrshld = infq_thrshld
+        self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
+        self.nan_cat_rpl = nan_cat_rpl
+        self.verbose = verbose
+        self.copy = copy
+        self.lencs = {}
+        self.var_values = {}
+        self.variables = None
+        self.ive = InfrequentValueEncoder(
+            thrshld=infq_thrshld, str_rpl=str_rpl,
+            num_rpl=num_rpl, verbose=verbose)
+
+    def fit(self, data, variables=None):
+        if variables is None:
+            self.variables = data.select_dtypes(include=['category', 'object']).columns
+        if self.copy:
+            data = data.copy()
         if self.infq_thrshld > 0:
-            data.loc[:, self.cat_vars] = self.ive.transform(data)
+            data.loc[:, self.variables] = self.ive.fit_transform(data, self.variables)
+        if self.verbose:
+            _print('Fitting category encoder...')
+            var_itr = tqdm(self.variables)
+        else:
+            var_itr = self.variables
+        for var in var_itr:
+            unique_vals = set(data[var].unique())
+            self.var_values[var] = unique_vals
+            rpl_val = self.rpl_mgr.get_rpl_for(data[var])
+            values = np.concatenate([data[var].values, [rpl_val]])
+            lenc = LabelEncoder().fit(values)
+            self.lencs[var] = lenc
+        return self
+
+    def transform(self, data):
+        if self.copy:
+            data = data.copy()
+        if self.infq_thrshld > 0:
+            data.loc[:, self.variables] = self.ive.transform(data[self.variables])
         if self.verbose:
             _print('Encoding unknown values...')
-            var_itr = tqdm(self.cat_vars)
+            var_itr = tqdm(self.variables)
         else:
-            var_itr = self.cat_vars
+            var_itr = self.variables
         for var in var_itr:
             data = self.fill_na(data, var)
             unique_vals = self.var_values[var]
@@ -148,22 +187,15 @@ class DummyEncoder(object):
             if unknown_mask.any():
                 rpl_val = self.rpl_mgr.get_rpl_for(data[var])
                 data.loc[unknown_mask, var] = rpl_val
-
         if self.verbose:
-            _print('Encoding as integers...')
-            var_itr = tqdm(self.cat_vars)
-        else:
-            var_itr = self.cat_vars
+            _print('Extracting categories...')
         for var in var_itr:
             lenc = self.lencs[var]
             data.loc[:, var] = lenc.transform(data[var])
+        return self
 
-        ohe_enc = self.ohe.transform(data[self.cat_vars])
-        num_data = data[self.num_vars]
-        return sparse.hstack([ohe_enc, num_data], format='csr')
-
-    def fit_transform(self, data):
-        self.fit(data)
+    def fit_transform(self, data, variables=None):
+        self.fit(data, variables)
         return self.transform(data)
 
     def fill_na(self, data, var):
@@ -228,21 +260,21 @@ class PercentileEncoder(object):
         self.variables = data.select_dtypes(include=['float', 'int']).columns
         if self.verbose:
             _print('Fitting ECDFs...')
-            itr = tqdm(self.variables)
+            var_itr = tqdm(self.variables)
         else:
-            itr = self.variables
-        for var in itr:
+            var_itr = self.variables
+        for var in var_itr:
             self.ecdfs[var] = ECDF(data[var].values)
         return self
 
     def transform(self, data):
         if self.verbose:
             _print('Extracting percentiles...')
-            itr = tqdm(self.variables)
+            var_itr = tqdm(self.variables)
         else:
-            itr = self.variables
+            var_itr = self.variables
         percentiles = []
-        for var in itr:
+        for var in var_itr:
             ecdf = self.ecdfs[var]
             prcntl_var_name = '%s_prctl' % var
             prcntl_var = pd.Series(ecdf(data[var].values), index=data.index,
