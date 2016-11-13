@@ -15,3 +15,19 @@ def test_infrequent_value_encoder_2():
     encoded = ive.fit_transform(df)
     expected = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'ifq']})
     assert expected.equals(encoded)
+
+
+def test_infrequent_value_encoder_3():
+    df = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c']})
+    ive = InfrequentValueEncoder(thrshld=0, str_rpl='ifq')
+    encoded = ive.fit_transform(df)
+    expected = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c']})
+    assert expected.equals(encoded)
+
+
+def test_infrequent_value_encoder_4():
+    df = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c']})
+    ive = InfrequentValueEncoder(thrshld=0, str_rpl='ifq')
+    encoded = ive.fit_transform(df)
+    expected = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c']})
+    assert expected.equals(encoded)
