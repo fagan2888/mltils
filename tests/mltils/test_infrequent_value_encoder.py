@@ -26,8 +26,10 @@ def test_infrequent_value_encoder_3():
 
 
 def test_infrequent_value_encoder_4():
-    df = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c']})
-    ive = InfrequentValueEncoder(thrshld=0, str_rpl='ifq')
+    df = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c'],
+                       'B': [1, 1, 1, 2, 3]})
+    ive = InfrequentValueEncoder(thrshld=2, str_rpl='ifq', num_rpl=-1)
     encoded = ive.fit_transform(df)
-    expected = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c']})
+    expected = pd.DataFrame({'A': ['ifq', 'ifq', 'ifq', 'ifq', 'ifq'],
+                             'B': [1, 1, 1, -1, -1]})
     assert expected.equals(encoded)
