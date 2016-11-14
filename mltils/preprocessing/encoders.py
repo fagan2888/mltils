@@ -5,26 +5,15 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from scipy import sparse
-from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from statsmodels.distributions import ECDF
 
 from ..utils.generic_utils import validate_is_data_frame, _print, ReplacementManager
+from .base import EncoderBase
 
 
 # TODO:  - Entender melhor implementação do BaseEstimator
 #        - Implementar um decorator para validação de parâmetros
-
-
-class EncoderBase(BaseEstimator, TransformerMixin):
-    # pylint: disable=too-few-public-methods
-    def get_var_itr(self, msg):
-        if self.verbose:
-            _print(msg)
-            var_itr = tqdm(self.variables)
-        else:
-            var_itr = self.variables
-        return var_itr
 
 
 class CountEncoder(EncoderBase):
@@ -76,7 +65,7 @@ class CountEncoder(EncoderBase):
         return pd.concat(count_vars, axis=1)
 
 
-class DummyEncoder(BaseEstimator, TransformerMixin):
+class DummyEncoder(EncoderBase):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
     def __init__(self, infq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
                  str_rpl='__unknown__', nan_cat_rpl='NaN', copy=True):
