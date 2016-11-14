@@ -12,7 +12,10 @@ from statsmodels.distributions import ECDF
 from .utils import validate_is_data_frame, _print, ReplacementManager
 
 
-# TODO: Entender melhor implementação do BaseEstimator
+# TODO:  - Entender melhor implementação do BaseEstimator
+#        - Implementar um decorator para validação de parâmetros
+
+
 class CountEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, str_nan_rpl='NaN', num_nan_rpl=-99999, verbose=False):
         self.str_nan_rpl = str_nan_rpl
@@ -270,10 +273,28 @@ class PercentileEncoder(BaseEstimator, TransformerMixin):
         return extracted
 
 
-# class NanEncoder(BaseEstimator, TransformerMixin):
-#     def __init__(self, str_rpl='NaN', num_rpl=-99999):
-#         self.str_rpl = str_rpl
-#         self.num_rpl = num_rpl
-#
-#     def fit(self, _):
-#         return self
+class NanEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self, str_rpl='NaN', num_rpl=-99999, copy=True,
+                 ignore_numeric=True):
+        self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
+        self.copy = copy
+        self.ignore_numeric = ignore_numeric
+        self.variables = None
+
+    def fit(self, data, variables=None):
+        if variables is None:
+            variables = data.columns
+        if self.ignore_numeric:
+            variables = data[variables].select_dtypes(exclude=[np.number]).columns
+        self.variables = variables
+        return self
+
+    def transform(self, data):
+        if self.copy:
+            data = data.copy()
+        for var in data[self.variables]:
+            null_mask = data[var].isnull()
+            if null_mask.any():
+                rpl_val = self.rpl_mgr.get_rpl_for(data[var])
+                data.loc[null_mask, var] = rpl_val
+        return data
