@@ -201,12 +201,13 @@ class CategoryEncoder(BaseEstimator, TransformerMixin):
 class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
     # pylint: disable=too-many-arguments
     def __init__(self, thrshld=50, str_rpl='__infrequent__',
-                 num_rpl=-99999, verbose=False):
+                 num_rpl=-999, verbose=False):
         self.thrshld = thrshld
         self.verbose = verbose
-        self.nan_rpl_mgr = ReplacementManager(num_rpl, str_rpl)
+        self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
         self.variables = None
         self.ifq_maps = {}
+        self.known_maps = {}
 
     def fit(self, data, variables=None):
         self.variables = data.columns if variables is None else variables
@@ -220,6 +221,7 @@ class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
                 var_count = data[var].value_counts()
                 ifq_values = var_count.index[var_count <= self.thrshld]
                 self.ifq_maps[var] = set(ifq_values)
+                self.known_maps[var] = set(data[var].unique())
         return self
 
     def transform(self, data):
@@ -232,9 +234,11 @@ class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
                 var_itr = self.variables
             for var in var_itr:
                 ifq_values = self.ifq_maps[var]
-                ifq_rows = data[var].isin(ifq_values)
+                known_values = self.known_maps[var]
+                ifq_rows = (data[var].isin(ifq_values)) | (~data[var].isin(known_values))
+                ifq_rows = ifq_rows & (~data[var].isnull())
                 if ifq_rows.any():
-                    rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
+                    rpl_val = self.rpl_mgr.get_rpl_for(data[var])
                     data.loc[ifq_rows, var] = rpl_val
         return data
 
