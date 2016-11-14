@@ -5,13 +5,15 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from scipy import sparse
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from statsmodels.distributions import ECDF
 
 from .utils import validate_is_data_frame, _print, ReplacementManager
 
 
-class CountEncoder(object):
+# TODO: Entender melhor implementação do BaseEstimator
+class CountEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, str_nan_rpl='NaN', num_nan_rpl=-99999, verbose=False):
         self.str_nan_rpl = str_nan_rpl
         self.num_nan_rpl = num_nan_rpl
@@ -62,12 +64,8 @@ class CountEncoder(object):
             count_vars.append(count_var)
         return pd.concat(count_vars, axis=1)
 
-    def fit_transform(self, data, variables=None):
-        self.fit(data, variables)
-        return self.transform(data)
 
-
-class DummyEncoder(object):
+class DummyEncoder(BaseEstimator, TransformerMixin):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
     def __init__(self, infq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
                  str_rpl='__unknown__', nan_cat_rpl='NaN', copy=True):
@@ -82,8 +80,8 @@ class DummyEncoder(object):
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.cat_enc = CategoryEncoder(
             infq_thrshld=infq_thrshld,
-            num_rpl=num_rpl,
-            str_rpl=str_rpl,
+            unk_num_rpl=num_rpl,
+            unk_str_rpl=str_rpl,
             nan_cat_rpl=nan_cat_rpl,
             copy=copy
         )
@@ -127,44 +125,40 @@ class DummyEncoder(object):
         num_data = data[self.num_vars]
         return sparse.hstack([ohe_enc, num_data], format='csr')
 
-    def fit_transform(self, data):
-        self.fit(data)
-        return self.transform(data)
 
-
-class CategoryEncoder(object):
+class CategoryEncoder(BaseEstimator, TransformerMixin):
     # pylint: disable=too-many-arguments, too-many-instance-attributes
-    def __init__(self, infq_thrshld=0, num_rpl=-99999,
-                 str_rpl='__unknown__', nan_cat_rpl='NaN', verbose=False,
-                 copy=True):
+    def __init__(self, infq_thrshld=0, unk_num_rpl=-99999,
+                 unk_str_rpl='__unknown__', nan_num_rpl=-99999,
+                 nan_cat_rpl='NaN', verbose=False, copy=True):
         self.infq_thrshld = infq_thrshld
-        self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
-        self.nan_cat_rpl = nan_cat_rpl
+        self.unk_rpl_mgr = ReplacementManager(unk_num_rpl, unk_str_rpl)
+        self.nan_rpl_mgr = ReplacementManager(nan_num_rpl, nan_cat_rpl)
         self.verbose = verbose
         self.copy = copy
         self.lencs = {}
         self.var_values = {}
         self.variables = None
         self.ive = InfrequentValueEncoder(
-            thrshld=infq_thrshld, str_rpl=str_rpl,
-            num_rpl=num_rpl, verbose=verbose)
+            thrshld=infq_thrshld, str_rpl=unk_str_rpl,
+            num_rpl=unk_num_rpl, verbose=verbose)
 
     def fit(self, data, variables=None):
         if variables is None:
             self.variables = data.select_dtypes(include=['category', 'object']).columns
         if self.copy:
             data = data.copy()
-        if self.infq_thrshld > 0:
-            data.loc[:, self.variables] = self.ive.fit_transform(data, self.variables)
+        data.loc[:, self.variables] = self.ive.fit_transform(data, self.variables)
         if self.verbose:
             _print('Fitting category encoder...')
             var_itr = tqdm(self.variables)
         else:
             var_itr = self.variables
         for var in var_itr:
+            data = self.fill_na(data, var)
             unique_vals = set(data[var].unique())
             self.var_values[var] = unique_vals
-            rpl_val = self.rpl_mgr.get_rpl_for(data[var])
+            rpl_val = self.unk_rpl_mgr.get_rpl_for(data[var])
             values = np.concatenate([data[var].values, [rpl_val]])
             lenc = LabelEncoder().fit(values)
             self.lencs[var] = lenc
@@ -173,8 +167,7 @@ class CategoryEncoder(object):
     def transform(self, data):
         if self.copy:
             data = data.copy()
-        if self.infq_thrshld > 0:
-            data.loc[:, self.variables] = self.ive.transform(data[self.variables])
+        data.loc[:, self.variables] = self.ive.transform(data[self.variables])
         if self.verbose:
             _print('Encoding unknown values...')
             var_itr = tqdm(self.variables)
@@ -185,27 +178,24 @@ class CategoryEncoder(object):
             unique_vals = self.var_values[var]
             unknown_mask = ~(data[var].isin(unique_vals).values)
             if unknown_mask.any():
-                rpl_val = self.rpl_mgr.get_rpl_for(data[var])
+                rpl_val = self.unk_rpl_mgr.get_rpl_for(data[var])
                 data.loc[unknown_mask, var] = rpl_val
         if self.verbose:
             _print('Extracting categories...')
         for var in var_itr:
             lenc = self.lencs[var]
             data.loc[:, var] = lenc.transform(data[var])
-        return self
-
-    def fit_transform(self, data, variables=None):
-        self.fit(data, variables)
-        return self.transform(data)
+        return data
 
     def fill_na(self, data, var):
+        rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
         null_mask = data[var].isnull()
         if null_mask.any():
-            data.loc[null_mask, var] = self.nan_cat_rpl
+            data.loc[null_mask, var] = rpl_val
         return data
 
 
-class InfrequentValueEncoder(object):
+class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
     # pylint: disable=too-many-arguments
     def __init__(self, thrshld=50, str_rpl='__infrequent__',
                  num_rpl=-99999, verbose=False):
@@ -245,12 +235,8 @@ class InfrequentValueEncoder(object):
                     data.loc[ifq_rows, var] = rpl_val
         return data
 
-    def fit_transform(self, data, variables=None):
-        self.fit(data, variables)
-        return self.transform(data)
 
-
-class PercentileEncoder(object):
+class PercentileEncoder(BaseEstimator, TransformerMixin):
     def __init__(self, verbose=False):
         self.verbose = verbose
         self.variables = None
@@ -283,6 +269,11 @@ class PercentileEncoder(object):
         extracted = pd.concat(percentiles, axis=1)
         return extracted
 
-    def fit_transform(self, data):
-        self.fit(data)
-        return self.transform(data)
+
+# class NanEncoder(BaseEstimator, TransformerMixin):
+#     def __init__(self, str_rpl='NaN', num_rpl=-99999):
+#         self.str_rpl = str_rpl
+#         self.num_rpl = num_rpl
+#
+#     def fit(self, _):
+#         return self
