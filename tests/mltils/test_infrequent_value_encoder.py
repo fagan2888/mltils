@@ -1,4 +1,5 @@
 # pylint: disable=missing-docstring, invalid-name, import-error
+import numpy as np
 import pandas as pd
 
 from mltils.encoders import InfrequentValueEncoder
@@ -32,4 +33,31 @@ def test_infrequent_value_encoder_4():
     encoded = ive.fit_transform(df)
     expected = pd.DataFrame({'A': ['ifq', 'ifq', 'ifq', 'ifq', 'ifq'],
                              'B': [1, 1, 1, -1, -1]})
+    assert expected.equals(encoded)
+
+
+def test_infrequent_value_encoder_5():
+    tr_df = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c']})
+    ive = InfrequentValueEncoder(thrshld=1, str_rpl='ifq')
+    ive.fit(tr_df)
+    te_df = pd.DataFrame({'A': ['c', 'd', 'e', 'a', 'b']})
+    encoded = ive.transform(te_df)
+    expected = pd.DataFrame({'A': ['ifq', 'ifq', 'ifq', 'a', 'b']})
+    assert expected.equals(encoded)
+
+
+def test_infrequent_value_encoder_6():
+    tr_df = pd.DataFrame({'A': ['a', 'a', 'b', 'b', 'c', np.nan]})
+    ive = InfrequentValueEncoder(thrshld=1, str_rpl='ifq')
+    ive.fit(tr_df)
+    te_df = pd.DataFrame({'A': [np.nan, 'c', 'd', 'e', 'a', 'b']})
+    encoded = ive.transform(te_df)
+    expected = pd.DataFrame({'A': [np.nan, 'ifq', 'ifq', 'ifq', 'a', 'b']})
+    assert expected.equals(encoded)
+
+
+def test_infrequent_value_encoder_7():
+    df = pd.DataFrame({'A': [1, 2, 3, np.nan, 4, np.nan]})
+    encoded = InfrequentValueEncoder(thrshld=1, num_rpl=-1).fit_transform(df)
+    expected = pd.DataFrame({'A': [-1, -1, -1, np.nan, -1, np.nan]})
     assert expected.equals(encoded)
