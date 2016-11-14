@@ -36,14 +36,18 @@ def test_count_encoder_3():
     assert expected.equals(encoded)
 
 
-def test_count_encoder_4():
+def _test_immutability(encoder):
     df = pd.DataFrame(
         {'A': ['a', np.nan, np.nan],
          'B': ['c', 'c', 'd'],
          'C': [1, 2, np.nan]})
     df_before = df.copy()
-    _ = CountEncoder().fit_transform(df)
+    _ = encoder.fit_transform(df)
     assert df_before.equals(df)
+
+
+def test_count_encoder_4():
+    _test_immutability(encoder=CountEncoder())
 
 
 def test_count_encoder_5():
