@@ -28,29 +28,21 @@ class EncoderBase(BaseEstimator, TransformerMixin):
 
 
 class CountEncoder(EncoderBase):
-    def __init__(self, encode_nas=True, nan_str_rpl='NaN', nan_num_rpl=-99999,
+    def __init__(self, nan_str_rpl='NaN', nan_num_rpl=-99999,
                  verbose=False):
-        self.encode_nas = encode_nas
-        if encode_nas:
-            self.nenc = NanEncoder(
-                str_rpl=nan_str_rpl, num_rpl=nan_num_rpl,
-                ignore_numeric=False, copy=True, verbose=False)
-        self.verbose = verbose
+        self.nenc = NanEncoder(
+            str_rpl=nan_str_rpl, num_rpl=nan_num_rpl, ignore_numeric=False,
+            copy=True, verbose=False)
         self.count_maps = {}
+        self.verbose = verbose
         self.variables = None
 
     def fit(self, data, variables=None):
         validate_is_data_frame(data)
         self.variables = variables if variables is not None else data.columns
         data = data[self.variables]
-        if self.encode_nas:
-            data = self.nenc.fit_transform(data)
-
-        if self.verbose > 0:
-            _print('Computing counts...')
-            var_itr = tqdm(data.columns)
-        else:
-            var_itr = data.columns
+        data = self.nenc.fit_transform(data)
+        var_itr = self.get_var_itr(msg='Computing counts...')
         for var in var_itr:
             var_count = data[var].value_counts().to_dict()
             self.count_maps[var] = var_count
@@ -59,9 +51,7 @@ class CountEncoder(EncoderBase):
     def transform(self, data):
         validate_is_data_frame(data)
         data = data[self.variables]
-        if self.encode_nas:
-            data = self.nenc.transform(data)
-
+        data = self.nenc.transform(data)
         count_vars = []
         nb_samples = data.shape[0]
         if self.verbose == 1:
@@ -92,9 +82,7 @@ class DummyEncoder(BaseEstimator, TransformerMixin):
                  str_rpl='__unknown__', nan_cat_rpl='NaN', copy=True):
         self.infq_thrshld = infq_thrshld
         self.sep = sep
-        self.verbose = verbose
         self.copy = copy
-        self.variables = None
         self.cat_vars = None
         self.num_vars = None
         self.var_names = []
@@ -106,6 +94,8 @@ class DummyEncoder(BaseEstimator, TransformerMixin):
             nan_cat_rpl=nan_cat_rpl,
             copy=copy
         )
+        self.verbose = verbose
+        self.variables = None
 
     def fit(self, data):
         validate_is_data_frame(data)
@@ -155,14 +145,14 @@ class CategoryEncoder(EncoderBase):
         self.infq_thrshld = infq_thrshld
         self.unk_rpl_mgr = ReplacementManager(unk_num_rpl, unk_str_rpl)
         self.nan_rpl_mgr = ReplacementManager(nan_num_rpl, nan_cat_rpl)
-        self.verbose = verbose
         self.copy = copy
         self.lencs = {}
         self.var_values = {}
-        self.variables = None
         self.ive = InfrequentValueEncoder(
             thrshld=infq_thrshld, str_rpl=unk_str_rpl,
             num_rpl=unk_num_rpl, verbose=verbose)
+        self.verbose = verbose
+        self.variables = None
 
     def fit(self, data, variables=None):
         if variables is None:
@@ -212,11 +202,11 @@ class InfrequentValueEncoder(EncoderBase):
     def __init__(self, thrshld=50, str_rpl='__infrequent__',
                  num_rpl=-999, verbose=False):
         self.thrshld = thrshld
-        self.verbose = verbose
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
-        self.variables = None
         self.ifq_maps = {}
         self.known_maps = {}
+        self.verbose = verbose
+        self.variables = None
 
     def fit(self, data, variables=None):
         self.variables = data.columns if variables is None else variables
@@ -246,9 +236,9 @@ class InfrequentValueEncoder(EncoderBase):
 
 class PercentileEncoder(EncoderBase):
     def __init__(self, verbose=False):
+        self.ecdfs = {}
         self.verbose = verbose
         self.variables = None
-        self.ecdfs = {}
 
     def fit(self, data):
         self.variables = data.select_dtypes(include=['float', 'int']).columns
