@@ -16,12 +16,26 @@ from .utils import validate_is_data_frame, _print, ReplacementManager
 #        - Implementar um decorator para validação de parâmetros
 
 
-class CountEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, str_nan_rpl='NaN', num_nan_rpl=-99999, verbose=False):
-        self.str_nan_rpl = str_nan_rpl
-        self.num_nan_rpl = num_nan_rpl
+class EncoderBase(BaseEstimator, TransformerMixin):
+    # pylint: disable=too-few-public-methods
+    def get_var_itr(self, msg):
+        if self.verbose:
+            _print(msg)
+            var_itr = tqdm(self.variables)
+        else:
+            var_itr = self.variables
+        return var_itr
+
+
+class CountEncoder(EncoderBase):
+    def __init__(self, encode_nas=True, nan_str_rpl='NaN', nan_num_rpl=-99999,
+                 verbose=False):
+        self.encode_nas = encode_nas
+        if encode_nas:
+            self.nenc = NanEncoder(
+                str_rpl=nan_str_rpl, num_rpl=nan_num_rpl,
+                ignore_numeric=False, copy=True, verbose=False)
         self.verbose = verbose
-        self.nan_rpl_mgr = ReplacementManager(num_nan_rpl, str_nan_rpl)
         self.count_maps = {}
         self.variables = None
 
@@ -29,20 +43,25 @@ class CountEncoder(BaseEstimator, TransformerMixin):
         validate_is_data_frame(data)
         self.variables = variables if variables is not None else data.columns
         data = data[self.variables]
+        if self.encode_nas:
+            data = self.nenc.fit_transform(data)
+
         if self.verbose > 0:
             _print('Computing counts...')
             var_itr = tqdm(data.columns)
         else:
             var_itr = data.columns
         for var in var_itr:
-            rpl = self.nan_rpl_mgr.get_rpl_for(data[var])
-            var_count = data[var].fillna(rpl).value_counts().to_dict()
+            var_count = data[var].value_counts().to_dict()
             self.count_maps[var] = var_count
         return self
 
     def transform(self, data):
         validate_is_data_frame(data)
         data = data[self.variables]
+        if self.encode_nas:
+            data = self.nenc.transform(data)
+
         count_vars = []
         nb_samples = data.shape[0]
         if self.verbose == 1:
@@ -54,8 +73,7 @@ class CountEncoder(BaseEstimator, TransformerMixin):
             count_var_name = var + '_count'
             count_var = pd.Series(np.zeros(nb_samples), index=data.index,
                                   name=count_var_name)
-            rpl = self.nan_rpl_mgr.get_rpl_for(data[var])
-            values = data[var].fillna(rpl)
+            values = data[var]
             if self.verbose == 2:
                 _print('Extracting counts for %s' % var)
                 itr = tqdm(values.iteritems(), total=nb_samples)
@@ -129,7 +147,7 @@ class DummyEncoder(BaseEstimator, TransformerMixin):
         return sparse.hstack([ohe_enc, num_data], format='csr')
 
 
-class CategoryEncoder(BaseEstimator, TransformerMixin):
+class CategoryEncoder(EncoderBase):
     # pylint: disable=too-many-arguments, too-many-instance-attributes
     def __init__(self, infq_thrshld=0, unk_num_rpl=-99999,
                  unk_str_rpl='__unknown__', nan_num_rpl=-99999,
@@ -152,11 +170,7 @@ class CategoryEncoder(BaseEstimator, TransformerMixin):
         if self.copy:
             data = data.copy()
         data.loc[:, self.variables] = self.ive.fit_transform(data, self.variables)
-        if self.verbose:
-            _print('Fitting category encoder...')
-            var_itr = tqdm(self.variables)
-        else:
-            var_itr = self.variables
+        var_itr = self.get_var_itr(msg='Fitting category encoder...')
         for var in var_itr:
             data = self.fill_na(data, var)
             unique_vals = set(data[var].unique())
@@ -171,11 +185,7 @@ class CategoryEncoder(BaseEstimator, TransformerMixin):
         if self.copy:
             data = data.copy()
         data.loc[:, self.variables] = self.ive.transform(data[self.variables])
-        if self.verbose:
-            _print('Encoding unknown values...')
-            var_itr = tqdm(self.variables)
-        else:
-            var_itr = self.variables
+        var_itr = self.get_var_itr(msg='Encoding categories...')
         for var in var_itr:
             data = self.fill_na(data, var)
             unique_vals = self.var_values[var]
@@ -183,8 +193,7 @@ class CategoryEncoder(BaseEstimator, TransformerMixin):
             if unknown_mask.any():
                 rpl_val = self.unk_rpl_mgr.get_rpl_for(data[var])
                 data.loc[unknown_mask, var] = rpl_val
-        if self.verbose:
-            _print('Extracting categories...')
+        var_itr = self.get_var_itr(msg='Extracting categories...')
         for var in var_itr:
             lenc = self.lencs[var]
             data.loc[:, var] = lenc.transform(data[var])
@@ -198,7 +207,7 @@ class CategoryEncoder(BaseEstimator, TransformerMixin):
         return data
 
 
-class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
+class InfrequentValueEncoder(EncoderBase):
     # pylint: disable=too-many-arguments
     def __init__(self, thrshld=50, str_rpl='__infrequent__',
                  num_rpl=-999, verbose=False):
@@ -212,11 +221,7 @@ class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
     def fit(self, data, variables=None):
         self.variables = data.columns if variables is None else variables
         if self.thrshld > 0:
-            if self.verbose:
-                _print('Computing infrequent values...')
-                var_itr = tqdm(self.variables)
-            else:
-                var_itr = self.variables
+            var_itr = self.get_var_itr(msg='Computing infrequent values...')
             for var in var_itr:
                 var_count = data[var].value_counts()
                 ifq_values = var_count.index[var_count <= self.thrshld]
@@ -227,11 +232,7 @@ class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
     def transform(self, data):
         if self.thrshld > 0:
             data = data[self.variables].copy()
-            if self.verbose:
-                _print('Encoding infrequent values...')
-                var_itr = tqdm(self.variables)
-            else:
-                var_itr = self.variables
+            var_itr = self.get_var_itr(msg='Encoding infrequent values...')
             for var in var_itr:
                 ifq_values = self.ifq_maps[var]
                 known_values = self.known_maps[var]
@@ -243,7 +244,7 @@ class InfrequentValueEncoder(BaseEstimator, TransformerMixin):
         return data
 
 
-class PercentileEncoder(BaseEstimator, TransformerMixin):
+class PercentileEncoder(EncoderBase):
     def __init__(self, verbose=False):
         self.verbose = verbose
         self.variables = None
@@ -251,21 +252,13 @@ class PercentileEncoder(BaseEstimator, TransformerMixin):
 
     def fit(self, data):
         self.variables = data.select_dtypes(include=['float', 'int']).columns
-        if self.verbose:
-            _print('Fitting ECDFs...')
-            var_itr = tqdm(self.variables)
-        else:
-            var_itr = self.variables
+        var_itr = self.get_var_itr(msg='Fitting ECDFs...')
         for var in var_itr:
             self.ecdfs[var] = ECDF(data[var].values)
         return self
 
     def transform(self, data):
-        if self.verbose:
-            _print('Extracting percentiles...')
-            var_itr = tqdm(self.variables)
-        else:
-            var_itr = self.variables
+        var_itr = self.get_var_itr(msg='Extracting percentiles...')
         percentiles = []
         for var in var_itr:
             ecdf = self.ecdfs[var]
@@ -277,12 +270,14 @@ class PercentileEncoder(BaseEstimator, TransformerMixin):
         return extracted
 
 
-class NanEncoder(BaseEstimator, TransformerMixin):
+class NanEncoder(EncoderBase):
+    # pylint: disable=too-many-instance-attributes, too-many-arguments
     def __init__(self, str_rpl='NaN', num_rpl=-99999, copy=True,
-                 ignore_numeric=True):
+                 ignore_numeric=True, verbose=True):
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
         self.copy = copy
         self.ignore_numeric = ignore_numeric
+        self.verbose = verbose
         self.variables = None
 
     def fit(self, data, variables=None):
@@ -296,7 +291,8 @@ class NanEncoder(BaseEstimator, TransformerMixin):
     def transform(self, data):
         if self.copy:
             data = data.copy()
-        for var in data[self.variables]:
+        var_itr = self.get_var_itr(msg='Encoding NaN values...')
+        for var in var_itr:
             null_mask = data[var].isnull()
             if null_mask.any():
                 rpl_val = self.rpl_mgr.get_rpl_for(data[var])
