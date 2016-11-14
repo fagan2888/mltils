@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from mltils.preprocessing.encoders import NanEncoder
+from mltils.utils.test_utils import _test_immutability
 
 
 def test_nan_encoder_1():
@@ -56,3 +57,7 @@ def test_nan_encoder_6():
                              'B': [1, 2, 2, np.nan, np.nan],
                              'C': [1, 2, 2, np.nan, np.nan]})
     assert expected.equals(encoded)
+
+
+def test_nan_encoder_7():
+    _test_immutability(encoder=NanEncoder())

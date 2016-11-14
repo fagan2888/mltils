@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from mltils.preprocessing.encoders import CountEncoder
+from mltils.utils.test_utils import _test_immutability
 
 
 def test_count_encoder_1():
@@ -34,16 +35,6 @@ def test_count_encoder_3():
          'B_count': [2., 2., 1.],
          'C_count': [1., 1., 1.]})
     assert expected.equals(encoded)
-
-
-def _test_immutability(encoder):
-    df = pd.DataFrame(
-        {'A': ['a', np.nan, np.nan],
-         'B': ['c', 'c', 'd'],
-         'C': [1, 2, np.nan]})
-    df_before = df.copy()
-    _ = encoder.fit_transform(df)
-    assert df_before.equals(df)
 
 
 def test_count_encoder_4():

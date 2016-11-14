@@ -2,6 +2,7 @@
 import pandas as pd
 
 from mltils.preprocessing.encoders import PercentileEncoder
+from mltils.utils.test_utils import _test_immutability
 
 
 def test_percentile_encoder_1():
@@ -23,3 +24,7 @@ def test_percentile_encoder_3():
                        'D': ['C', 'D']})
     encoded = PercentileEncoder().fit_transform(df)
     assert encoded.columns.tolist() == ['A_prctl', 'B_prctl']
+
+
+def test_percentile_encoder_4():
+    _test_immutability(encoder=PercentileEncoder())

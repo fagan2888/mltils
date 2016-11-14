@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from mltils.preprocessing.encoders import InfrequentValueEncoder
+from mltils.utils.test_utils import _test_immutability
 
 
 def test_infrequent_value_encoder_1():
@@ -61,3 +62,7 @@ def test_infrequent_value_encoder_7():
     encoded = InfrequentValueEncoder(thrshld=1, num_rpl=-1).fit_transform(df)
     expected = pd.DataFrame({'A': [-1, -1, -1, np.nan, -1, np.nan]})
     assert expected.equals(encoded)
+
+
+def test_infrequent_value_encoder_8():
+    _test_immutability(encoder=InfrequentValueEncoder())

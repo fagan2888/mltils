@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from mltils.preprocessing.encoders import CategoryEncoder
+from mltils.utils.test_utils import _test_immutability
 
 
 def test_category_encoder_1():
@@ -43,3 +44,7 @@ def test_category_encoder_5():
     expected = pd.DataFrame({'A': [1, 1, 2, 3, 4],
                              'B': [1, 2, np.nan, np.nan, 3]})
     assert expected.equals(encoded)
+
+
+def test_category_encoder_6():
+    _test_immutability(encoder=CategoryEncoder())
