@@ -51,7 +51,7 @@ def test_count_encoder_5():
         {'A': ['a', np.nan, np.nan],
          'B': ['c', 'c', 'd'],
          'C': [1, 2, np.nan]})
-    encoded = CountEncoder(variables=['A', 'B']).fit_transform(df)
+    encoded = CountEncoder().fit_transform(df, variables=['A', 'B'])
     expected = pd.DataFrame(
         {'A_count': [1., 2., 2.],
          'B_count': [2., 2., 1.]})
