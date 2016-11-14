@@ -1,7 +1,7 @@
 # pylint: disable=missing-docstring, invalid-name, import-error
 import pandas as pd
 
-from mltils.encoders import PercentileEncoder
+from mltils.preprocessing.encoders import PercentileEncoder
 
 
 def test_percentile_encoder_1():

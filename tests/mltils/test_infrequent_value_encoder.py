@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from mltils.encoders import InfrequentValueEncoder
+from mltils.preprocessing.encoders import InfrequentValueEncoder
 
 
 def test_infrequent_value_encoder_1():

@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from mltils.encoders import CategoryEncoder
+from mltils.preprocessing.encoders import CategoryEncoder
 
 
 def test_category_encoder_1():

@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from mltils.encoders import NanEncoder
+from mltils.preprocessing.encoders import NanEncoder
 
 
 def test_nan_encoder_1():

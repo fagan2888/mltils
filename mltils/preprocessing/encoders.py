@@ -9,7 +9,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from statsmodels.distributions import ECDF
 
-from .utils import validate_is_data_frame, _print, ReplacementManager
+from ..utils.generic_utils import validate_is_data_frame, _print, ReplacementManager
 
 
 # TODO:  - Entender melhor implementação do BaseEstimator

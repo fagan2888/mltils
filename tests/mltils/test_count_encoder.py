@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from mltils.encoders import CountEncoder
+from mltils.preprocessing.encoders import CountEncoder
 
 
 def test_count_encoder_1():
