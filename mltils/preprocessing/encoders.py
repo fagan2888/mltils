@@ -11,8 +11,8 @@ from statsmodels.distributions import ECDF
 from ..utils.generic_utils import validate_is_data_frame, _print, ReplacementManager
 from .base import EncoderBase
 
-# TODO:  - Entender melhor implementação do BaseEstimator
-#        - Implementar um decorator para validação de parâmetros
+# TODO:  - Better understand BaseEstimator
+#        - Implement a decorator for parameter validation (pd.DataFrame expected)
 
 
 class CountEncoder(EncoderBase):
@@ -66,8 +66,9 @@ class CountEncoder(EncoderBase):
 
 class DummyEncoder(EncoderBase):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
-    def __init__(self, ifq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
-                 str_rpl='__unknown__', nan_cat_rpl='NaN', copy=True):
+    def __init__(self, sep='_', ifq_thrshld=0, ifq_num_rpl=-999,
+                 ifq_str_rpl='__ifq__', nan_num_rpl=-99999, nan_str_rpl='NaN',
+                 verbose=False, copy=True):
         self.ifq_thrshld = ifq_thrshld
         self.sep = sep
         self.copy = copy
@@ -76,28 +77,25 @@ class DummyEncoder(EncoderBase):
         self.var_names = []
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.cat_enc = CategoryEncoder(
-            ifq_thrshld=ifq_thrshld, ifq_num_rpl=num_rpl,
-            ifq_str_rpl=str_rpl, nan_str_rpl=nan_cat_rpl, copy=copy)
+            ifq_thrshld=ifq_thrshld, ifq_num_rpl=ifq_num_rpl,
+            ifq_str_rpl=ifq_str_rpl, nan_str_rpl=nan_str_rpl,
+            nan_num_rpl=nan_num_rpl, copy=False)
         self.verbose = verbose
         self.variables = None
 
-    def fit(self, data):
-        validate_is_data_frame(data)
-        self.variables = data.columns
-        self.cat_vars = data.select_dtypes(include=['category', 'object']).columns
+    def fit(self, data, variables=None):
+        self.variables = data.columns if variables is None else variables
+        self.cat_vars = _get_cat_vars_for(data)
         self.num_vars = np.setdiff1d(self.variables, self.cat_vars)
-
         if self.copy:
             data = data.copy()
-
         data = self.cat_enc.fit_transform(data)
 
         for var in self.cat_vars:
             unique_vals = self.cat_enc.var_values[var]
             self.var_names.extend(
                 '%s%s%s' % (var, self.sep, str(value))
-                for value in sorted(unique_vals)
-            )
+                for value in sorted(unique_vals))
         self.var_names.extend(self.num_vars)
 
         if self.verbose:
@@ -108,13 +106,11 @@ class DummyEncoder(EncoderBase):
         return self
 
     def transform(self, data):
-        validate_is_data_frame(data)
+        # TODO: Do a better a check, showing the unexpected columns in the error
         if not data.columns.equals(self.variables):
             raise ValueError('Unexpected variables found!')
-
         if self.copy:
             data = data.copy()
-
         data = self.cat_enc.transform(data)
         ohe_enc = self.ohe.transform(data[self.cat_vars])
         num_data = data[self.num_vars]
@@ -136,7 +132,7 @@ class CategoryEncoder(EncoderBase):
             ignore_numeric=False, copy=False, verbose=False)
         self.ive = InfrequentValueEncoder(
             thrshld=ifq_thrshld, str_rpl=ifq_str_rpl,
-            num_rpl=ifq_num_rpl, verbose=verbose)
+            num_rpl=ifq_num_rpl, copy=False, verbose=False)
         self.verbose = verbose
         self.variables = None
 
@@ -145,7 +141,7 @@ class CategoryEncoder(EncoderBase):
             if all_vars:
                 self.variables = data.columns
             else:
-                self.variables = data.select_dtypes(include=['object']).columns
+                self.variables = _get_cat_vars_for(data)
         else:
             self.variables = variables
         if self.copy:
@@ -186,10 +182,11 @@ class CategoryEncoder(EncoderBase):
 
 class InfrequentValueEncoder(EncoderBase):
     # pylint: disable=too-many-arguments
-    def __init__(self, thrshld=50, str_rpl='ifq__',
-                 num_rpl=-999, verbose=False):
+    def __init__(self, thrshld=50, str_rpl='ifq__', num_rpl=-999,
+                 copy=True, verbose=False):
         self.thrshld = thrshld
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
+        self.copy = copy
         self.ifq_maps = {}
         self.known_maps = {}
         self.verbose = verbose
@@ -208,7 +205,8 @@ class InfrequentValueEncoder(EncoderBase):
 
     def transform(self, data):
         if self.thrshld > 0:
-            data = data[self.variables].copy()
+            if self.copy:
+                data = data.copy()
             var_itr = self.get_var_itr(msg='Encoding infrequent values...')
             for var in var_itr:
                 ifq_values = self.ifq_maps[var]
@@ -228,7 +226,7 @@ class PercentileEncoder(EncoderBase):
         self.variables = None
 
     def fit(self, data):
-        self.variables = data.select_dtypes(include=['float', 'int']).columns
+        self.variables = data.select_dtypes(include=[np.number]).columns
         var_itr = self.get_var_itr(msg='Fitting ECDFs...')
         for var in var_itr:
             self.ecdfs[var] = ECDF(data[var].values)
@@ -250,7 +248,7 @@ class PercentileEncoder(EncoderBase):
 class NanEncoder(EncoderBase):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
     def __init__(self, str_rpl='NaN', num_rpl=-99999, copy=True,
-                 ignore_numeric=True, verbose=True):
+                 ignore_numeric=True, verbose=False):
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
         self.copy = copy
         self.ignore_numeric = ignore_numeric
@@ -275,3 +273,7 @@ class NanEncoder(EncoderBase):
                 rpl_val = self.rpl_mgr.get_rpl_for(data[var])
                 data.loc[null_mask, var] = rpl_val
         return data
+
+
+def _get_cat_vars_for(data):
+    return data.select_dtypes(include=['object']).columns
