@@ -79,14 +79,12 @@ class DummyEncoder(EncoderBase):
         self.cat_enc = CategoryEncoder(
             ifq_thrshld=ifq_thrshld, ifq_num_rpl=ifq_num_rpl,
             ifq_str_rpl=ifq_str_rpl, nan_str_rpl=nan_str_rpl,
-            nan_num_rpl=nan_num_rpl, copy=False)
+            nan_num_rpl=nan_num_rpl, copy=copy, verbose=verbose)
         self.verbose = verbose
-        self.variables = None
 
-    def fit(self, data, variables=None):
-        self.variables = data.columns if variables is None else variables
-        self.cat_vars = _get_cat_vars_for(data)
-        self.num_vars = np.setdiff1d(self.variables, self.cat_vars)
+    def fit(self, data, cat_vars=None):
+        self.cat_vars = _get_cat_vars_for(data) if cat_vars is None else cat_vars
+        self.num_vars = np.setdiff1d(data.columns, self.cat_vars)
         if self.copy:
             data = data.copy()
         data = self.cat_enc.fit_transform(data)
@@ -106,9 +104,7 @@ class DummyEncoder(EncoderBase):
         return self
 
     def transform(self, data):
-        # TODO: Do a better a check, showing the unexpected columns in the error
-        if not data.columns.equals(self.variables):
-            raise ValueError('Unexpected variables found!')
+        # TODO: Check for unexpected values
         if self.copy:
             data = data.copy()
         data = self.cat_enc.transform(data)
@@ -132,7 +128,7 @@ class CategoryEncoder(EncoderBase):
             ignore_numeric=False, copy=False, verbose=False)
         self.ive = InfrequentValueEncoder(
             thrshld=ifq_thrshld, str_rpl=ifq_str_rpl,
-            num_rpl=ifq_num_rpl, copy=False, verbose=False)
+            num_rpl=ifq_num_rpl, copy=copy, verbose=False)
         self.verbose = verbose
         self.variables = None
 
@@ -146,8 +142,13 @@ class CategoryEncoder(EncoderBase):
             self.variables = variables
         if self.copy:
             data = data.copy()
+        if self.verbose:
+            _print('Fitting NaN enconder...')
         data.loc[:, self.variables] = self.nenc.fit_transform(data, self.variables)
-        data.loc[:, self.variables] = self.ive.fit_transform(data, self.variables)
+        if self.ifq_thrshld > 0:
+            if self.verbose:
+                _print('Fitting infrequent values encoder...')
+            data.loc[:, self.variables] = self.ive.fit_transform(data, self.variables)
 
         var_itr = self.get_var_itr(msg='Fitting category encoder...')
         for var in var_itr:
@@ -162,8 +163,13 @@ class CategoryEncoder(EncoderBase):
     def transform(self, data):
         if self.copy:
             data = data.copy()
+        if self.verbose:
+            _print('Encoding NaN values...')
         data.loc[:, self.variables] = self.nenc.transform(data[self.variables])
-        data.loc[:, self.variables] = self.ive.transform(data[self.variables])
+        if self.ifq_thrshld > 0:
+            if self.verbose:
+                _print('Encoding infrequent values...')
+            data.loc[:, self.variables] = self.ive.transform(data[self.variables])
 
         var_itr = self.get_var_itr(msg='Encoding unknown values...')
         for var in var_itr:
