@@ -11,7 +11,6 @@ from statsmodels.distributions import ECDF
 from ..utils.generic_utils import validate_is_data_frame, _print, ReplacementManager
 from .base import EncoderBase
 
-
 # TODO:  - Entender melhor implementação do BaseEstimator
 #        - Implementar um decorator para validação de parâmetros
 
@@ -20,8 +19,8 @@ class CountEncoder(EncoderBase):
     def __init__(self, nan_str_rpl='NaN', nan_num_rpl=-99999,
                  verbose=False):
         self.nenc = NanEncoder(
-            str_rpl=nan_str_rpl, num_rpl=nan_num_rpl, ignore_numeric=False,
-            copy=True, verbose=False)
+            str_rpl=nan_str_rpl, num_rpl=nan_num_rpl,
+            ignore_numeric=False, copy=True, verbose=False)
         self.count_maps = {}
         self.verbose = verbose
         self.variables = None
@@ -67,9 +66,9 @@ class CountEncoder(EncoderBase):
 
 class DummyEncoder(EncoderBase):
     # pylint: disable=too-many-instance-attributes, too-many-arguments
-    def __init__(self, infq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
+    def __init__(self, ifq_thrshld=0, sep='_', verbose=False, num_rpl=-99999,
                  str_rpl='__unknown__', nan_cat_rpl='NaN', copy=True):
-        self.infq_thrshld = infq_thrshld
+        self.ifq_thrshld = ifq_thrshld
         self.sep = sep
         self.copy = copy
         self.cat_vars = None
@@ -77,12 +76,8 @@ class DummyEncoder(EncoderBase):
         self.var_names = []
         self.ohe = OneHotEncoder(handle_unknown='ignore', sparse=True)
         self.cat_enc = CategoryEncoder(
-            infq_thrshld=infq_thrshld,
-            unk_num_rpl=num_rpl,
-            unk_str_rpl=str_rpl,
-            nan_cat_rpl=nan_cat_rpl,
-            copy=copy
-        )
+            ifq_thrshld=ifq_thrshld, ifq_num_rpl=num_rpl,
+            ifq_str_rpl=str_rpl, nan_str_rpl=nan_cat_rpl, copy=copy)
         self.verbose = verbose
         self.variables = None
 
@@ -128,30 +123,38 @@ class DummyEncoder(EncoderBase):
 
 class CategoryEncoder(EncoderBase):
     # pylint: disable=too-many-arguments, too-many-instance-attributes
-    def __init__(self, infq_thrshld=0, unk_num_rpl=-99999,
-                 unk_str_rpl='__unknown__', nan_num_rpl=-99999,
-                 nan_cat_rpl='NaN', verbose=False, copy=True):
-        self.infq_thrshld = infq_thrshld
-        self.unk_rpl_mgr = ReplacementManager(unk_num_rpl, unk_str_rpl)
-        self.nan_rpl_mgr = ReplacementManager(nan_num_rpl, nan_cat_rpl)
+    def __init__(self, ifq_thrshld=0, ifq_num_rpl=-999, ifq_str_rpl='__ifq__',
+                 nan_num_rpl=-99999, nan_str_rpl='NaN', verbose=False,
+                 copy=True):
+        self.ifq_thrshld = ifq_thrshld
+        self.unk_rpl_mgr = ReplacementManager(ifq_num_rpl, ifq_str_rpl)
         self.copy = copy
         self.lencs = {}
         self.var_values = {}
+        self.nenc = NanEncoder(
+            str_rpl=nan_str_rpl, num_rpl=nan_num_rpl,
+            ignore_numeric=False, copy=False, verbose=False)
         self.ive = InfrequentValueEncoder(
-            thrshld=infq_thrshld, str_rpl=unk_str_rpl,
-            num_rpl=unk_num_rpl, verbose=verbose)
+            thrshld=ifq_thrshld, str_rpl=ifq_str_rpl,
+            num_rpl=ifq_num_rpl, verbose=verbose)
         self.verbose = verbose
         self.variables = None
 
-    def fit(self, data, variables=None):
+    def fit(self, data, variables=None, all_vars=False):
         if variables is None:
-            self.variables = data.select_dtypes(include=['category', 'object']).columns
+            if all_vars:
+                self.variables = data.columns
+            else:
+                self.variables = data.select_dtypes(include=['object']).columns
+        else:
+            self.variables = variables
         if self.copy:
             data = data.copy()
+        data.loc[:, self.variables] = self.nenc.fit_transform(data, self.variables)
         data.loc[:, self.variables] = self.ive.fit_transform(data, self.variables)
+
         var_itr = self.get_var_itr(msg='Fitting category encoder...')
         for var in var_itr:
-            data = self.fill_na(data, var)
             unique_vals = set(data[var].unique())
             self.var_values[var] = unique_vals
             rpl_val = self.unk_rpl_mgr.get_rpl_for(data[var])
@@ -163,32 +166,27 @@ class CategoryEncoder(EncoderBase):
     def transform(self, data):
         if self.copy:
             data = data.copy()
+        data.loc[:, self.variables] = self.nenc.transform(data[self.variables])
         data.loc[:, self.variables] = self.ive.transform(data[self.variables])
-        var_itr = self.get_var_itr(msg='Encoding categories...')
+
+        var_itr = self.get_var_itr(msg='Encoding unknown values...')
         for var in var_itr:
-            data = self.fill_na(data, var)
             unique_vals = self.var_values[var]
             unknown_mask = ~(data[var].isin(unique_vals).values)
             if unknown_mask.any():
                 rpl_val = self.unk_rpl_mgr.get_rpl_for(data[var])
                 data.loc[unknown_mask, var] = rpl_val
-        var_itr = self.get_var_itr(msg='Extracting categories...')
+
+        var_itr = self.get_var_itr(msg='Encoding categories...')
         for var in var_itr:
             lenc = self.lencs[var]
             data.loc[:, var] = lenc.transform(data[var])
         return data
 
-    def fill_na(self, data, var):
-        rpl_val = self.nan_rpl_mgr.get_rpl_for(data[var])
-        null_mask = data[var].isnull()
-        if null_mask.any():
-            data.loc[null_mask, var] = rpl_val
-        return data
-
 
 class InfrequentValueEncoder(EncoderBase):
     # pylint: disable=too-many-arguments
-    def __init__(self, thrshld=50, str_rpl='__infrequent__',
+    def __init__(self, thrshld=50, str_rpl='ifq__',
                  num_rpl=-999, verbose=False):
         self.thrshld = thrshld
         self.rpl_mgr = ReplacementManager(num_rpl, str_rpl)
