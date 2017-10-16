@@ -17,12 +17,13 @@ from .base import EncoderBase
 
 class CountEncoder(EncoderBase):
     def __init__(self, nan_str_rpl='NaN', nan_num_rpl=-99999,
-                 verbose=False):
+                 verbose=False, unq_thrsld=10000):
         self.nenc = NanEncoder(
             str_rpl=nan_str_rpl, num_rpl=nan_num_rpl,
             ignore_numeric=False, copy=True, verbose=False)
         self.count_maps = {}
         self.verbose = verbose
+        self.unq_thrsld = unq_thrsld
         self.variables = None
 
     def fit(self, data, variables=None):
@@ -48,18 +49,22 @@ class CountEncoder(EncoderBase):
         else:
             cols_itr = data.columns
         for var in cols_itr:
-            count_var_name = var + '_count'
-            count_var = pd.Series(np.zeros(nb_samples), index=data.index,
-                                  name=count_var_name)
-            values = data[var]
-            if self.verbose == 2:
-                _print('Extracting counts for %s' % var)
-                itr = tqdm(values.iteritems(), total=nb_samples)
+            if data[var].nunique() < self.unq_thrsld:
+                count_var = data[var].replace(self.count_maps[var])
+                count_var.name = var + '_count'
             else:
-                itr = values.iteritems()
-            for index, current_value in itr:
-                if current_value in self.count_maps[var]:
-                    count_var.at[index] = self.count_maps[var][current_value]
+                count_var_name = var + '_count'
+                count_var = pd.Series(np.zeros(nb_samples), index=data.index,
+                                      name=count_var_name)
+                values = data[var]
+                if self.verbose == 2:
+                    _print('Extracting counts for %s' % var)
+                    itr = tqdm(values.iteritems(), total=nb_samples)
+                else:
+                    itr = values.iteritems()
+                for index, current_value in itr:
+                    if current_value in self.count_maps[var]:
+                        count_var.at[index] = self.count_maps[var][current_value]
             count_vars.append(count_var)
         return pd.concat(count_vars, axis=1)
 
