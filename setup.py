@@ -10,6 +10,6 @@ setup(name='mltils',
       license='MIT',
       install_requires=[
           'tqdm', 'numpy', 'scipy', 'scikit-learn', 'pandas',
-          'xgboost', 'statsmodels'
+          'xgboost', 'statsmodels', 'category_encoders'
       ],
       packages=find_packages())
