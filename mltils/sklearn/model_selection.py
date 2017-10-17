@@ -189,7 +189,7 @@ class BaseSearchCV(sklearn.model_selection._search.BaseSearchCV):
                 [info[-1]['estimator'] for info in current_slice]
             ))
         out = [info[:-1] for info in out]
-        self.cv = cv
+        self.folds = list(cv.split(X, y, groups))
 
         # if one choose to see train score, "out" will contain train score info
         if self.return_train_score:
@@ -288,9 +288,8 @@ class BaseSearchCV(sklearn.model_selection._search.BaseSearchCV):
 
         return self
 
-    def extract_meta_features(self, tr_x, tr_y, te_x, prefix=None, groups=None):
+    def extract_meta_features(self, tr_x, te_x, prefix=None):
         import pandas as pd
-        folds = self.cv.split(tr_x, tr_y, groups)
         tr_meta_features = []
         te_meta_features = []
         for model_name, models in self.cv_estimators:
@@ -298,11 +297,11 @@ class BaseSearchCV(sklearn.model_selection._search.BaseSearchCV):
                 model_name = model_name.replace('model', prefix)
             tr_meta_feature = np.zeros(tr_x.shape[0])
             te_meta_feature = np.zeros(te_x.shape[0])
-            for model, (_, test) in zip(models, folds):
+            for model, (_, test) in zip(models, self.folds):
                 vl_x = tr_x.iloc[test, :]
                 tr_meta_feature[test] = model.predict_proba(vl_x)[:, 1]
                 te_meta_feature += model.predict_proba(te_x)[:, 1]
-            te_meta_feature = te_meta_feature / self.cv.get_n_splits()
+            te_meta_feature = te_meta_feature / len(self.folds)
             tr_meta_feature = pd.Series(tr_meta_feature, name=model_name)
             te_meta_feature = pd.Series(te_meta_feature, name=model_name)
             tr_meta_features.append(tr_meta_feature)
