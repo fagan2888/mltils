@@ -1,4 +1,5 @@
 
+import os
 import gc
 import numpy as np
 import pandas as pd
@@ -7,11 +8,12 @@ from sklearn.model_selection import ParameterGrid
 
 
 class BoosterSearchBase(object):
-    def __init__(self, param_grid, cv, metric, maximize):
+    def __init__(self, param_grid, cv, metric, maximize, save_partial=True):
         self.param_grid = ParameterGrid(param_grid)
         self.cv = cv
         self.metric = metric
         self.maximize = maximize
+        self.save_partial = save_partial
         self.folds = None
         self.n_train_rows = None
         self.gs_result = None
@@ -50,6 +52,9 @@ class BoosterSearchBase(object):
             tr_meta_feature, te_meta_feature = self.extract_model_meta_features(
                 comb_id, cv_packs, te_data
             )
+            if self.save_partial:
+                _save_partial(tr_meta_feature, te_meta_feature)
+
             info['tr_meta_feature'] = tr_meta_feature
             info['te_meta_feature'] = te_meta_feature
             gc.collect()
@@ -126,3 +131,15 @@ def print_cv_info(cv_info, metric, maximize):
         print('score (mean + std): %f\n' % cv_info[metric_score])
     print('----------------------------------------')
     print()
+
+
+def _save_partial(tr_meta_feature, te_meta_feature):
+    if not os.path.exists('meta_features'):
+        os.makedirs('meta_features')
+    if not os.path.exists('meta_features/partial'):
+        os.makedirs('meta_features/partial')
+
+    tr_path = 'meta_features/partial/tr_%s.csv' % tr_meta_feature.name
+    te_path = 'meta_features/partial/te_%s.csv' % te_meta_feature.name
+    tr_meta_feature.to_frame().to_csv(tr_path, index=False)
+    te_meta_feature.to_frame().to_csv(te_path, index=False)
